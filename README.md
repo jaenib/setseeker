@@ -27,9 +27,9 @@ Run fileshazzer.py again to process them, results will be in the 'tracklists' fo
 # example result
 
 Final Tracklist:
-[00:01:00] Umek - Center of Gravity
-[00:02:30] Steve Aoki - Double Helix
-[00:13:30] Sade - Like Tattoo
+[00:01:00] Umek - Center of Gravity<br>
+[00:02:30] Steve Aoki - Double Helix<br>
+[00:13:30] Sade - Like Tattoo<br>
 [00:21:00] Zimmie Gix - Absolute Chill
 [00:21:30] Andrea Frisina & Irregular Synth - Dub City
 [00:22:00] Alan Fitzpatrick - Brian's Proper Dun One
