@@ -8,12 +8,12 @@ slsk_dl.py - Seeks and downloads the tracks on soulseek using slsk-batchdl comma
 
 # setup
 
-Run fileshazzer.py initially to setup the folders until it tells you to add MP3 files to the 'sets' folder.
-
-Alternatively create a folder called 'sets' in the same folder where you put fileshazzer.py.
+execute setup.sh from command line as: <code> ./setup.sh </code>
 
 
 # run
+
+execute launcher.sh from command line as: <code> ./launcher.sh </code>
 
 Put MP3s into 'sets' folder.
 
