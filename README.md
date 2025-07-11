@@ -13,24 +13,28 @@ execute setup.sh from command line as: <code> ./setup.sh </code>
 
 # run
 
-execute launcher.sh from command line as: <code> ./launcher.sh </code>
-
 Put MP3s into 'sets' folder.
 
-  Optionally find segment_length variable at the top of fileshazzer.py and change it.
-  
-  Default 30s go up if your set consists of longer tracks / your tracklists get more than 4 instances of the same id / things are taking too long.
+run all:
 
-Run fileshazzer.py again to process them, results will be in the 'tracklists' folder.
+  execute launcher.sh from command line as: <code> ./launcher.sh </code>
+
+
+or run fileshazzer.py to process them, results will be in the 'tracklists' folder.
 
   If the code seems stuck be patient, its shazam api limiting calls, it will continue.
+
+  Bad results? 
+
+   find segment_length variable at the top of fileshazzer.py and change it.
+  
+   Default 30s go up if your set consists of longer tracks / your tracklists get more than 4 instances of the same id / things are taking too long.
 
 
 # example result
 
 Final Tracklist:<br>
 [00:01:00] Umek - Center of Gravity<br>
-[00:02:30] Steve Aoki - Double Helix<br>
 [00:13:30] Sade - Like Tattoo<br>
 [00:21:00] Zimmie Gix - Absolute Chill<br>
 [00:21:30] Andrea Frisina & Irregular Synth - Dub City<br>
