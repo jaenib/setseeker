@@ -2,7 +2,7 @@
 
 fileshazzer.py - Takes DJ sets (or any MP3) splitting them into shazamable segments. Returns a list of timestamped track IDs in plain text.
 
-slsk_dl.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool.
+seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool.
 
 
 
