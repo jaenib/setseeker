@@ -10,7 +10,7 @@ else
     echo "Python virtual environment already exists."
 fi
 
-echo "🐍 Activating venv and installing Python dependencies..."
+echo "Activating venv and installing Python dependencies..."
 source setseek_venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -31,7 +31,7 @@ fi
 
 # 3. Clone slsk-batchdl if not present
 if [ ! -d "slsk-batchdl" ]; then
-    echo "📥 Cloning slsk-batchdl..."
+    echo "Cloning slsk-batchdl..."
     git clone https://github.com/fiso64/slsk-batchdl.git
 else
     echo "slsk-batchdl already cloned."
