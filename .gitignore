@@ -1,2 +1,12 @@
 user/slsk.key
 user/slsk_cred.json
+queries.txt
+
+user/
+logs/
+sets/
+tracklists/
+setseek_venv/
+slsk-batchdl/
+spoils/
+temp/
