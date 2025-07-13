@@ -17,12 +17,12 @@ pip install -r requirements.txt
 
 # 2. Install .NET 6 SDK if missing
 if ! command -v dotnet &> /dev/null; then
-    echo "❗ .NET 6 SDK not found. Installing..."
+    echo ".NET 6 SDK not found. Installing..."
     # macOS with Homebrew
     if [[ "$OSTYPE" == "darwin"* ]]; then
         brew install --cask dotnet-sdk
     else
-        echo "❗ Please install .NET 6 SDK manually: https://dotnet.microsoft.com/en-us/download"
+        echo "Please install .NET 6 SDK manually: https://dotnet.microsoft.com/en-us/download"
         exit 1
     fi
 else
