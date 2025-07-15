@@ -55,7 +55,7 @@ def querify_tracklists(tracklist_dir, output_query_file):
 
                         if format_type == "mp3":
                             query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
-                        else:
+                        if format_type == "flac":
                             query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
 
                         queries.append(query_line)
