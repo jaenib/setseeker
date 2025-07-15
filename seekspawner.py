@@ -4,7 +4,7 @@ import subprocess
 import glob
 
 # ---------- SETTINGS -----------------------------
-TRACKLIST_DIR = "tracklists_test"
+TRACKLIST_DIR = "tracklists"
 QUERYFILE_PATH = "queries.txt"
 SKIPPED_PATH = "skipped_queries.log"
 
