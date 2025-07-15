@@ -21,23 +21,23 @@ Put MP3s into 'sets' folder.
 
 run all:
 
-  execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> 
+&nbsp; - execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> 
 
 
 or run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
 
-  If the code seems stuck be patient, its shazam api limiting calls, it will continue.
+&nbsp; - If the code seems stuck be patient, its shazam api limiting calls, it will continue.<br>
 
-  Bad results? 
+&nbsp;  Bad results? 
 
-   find segment_length variable at the top of fileshazzer.py and change it.
+&nbsp;&nbsp; - find segment_length variable at the top of fileshazzer.py and change it.
   
-   Default 30s go up if your set consists of longer tracks / your tracklists get more than 4 instances of the same id / things are taking too long.
+&nbsp;&nbsp; - Default 30s go up if your tracklists get more than 4 instances of the same id / things are taking too long.
    
 
 or run setshazzer.py for download only
 
-  needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt
+&nbsp; - needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt
 
   
 
