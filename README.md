@@ -10,6 +10,7 @@ seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl c
 
 execute setup.sh from command line as: <code> chmod +x setup.sh </code> and <code> ./setup.sh </code>
 
+there is a skippable prompt to enter your soulseek credentials
 
 # run
 
