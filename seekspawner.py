@@ -4,7 +4,7 @@ import subprocess
 import glob
 
 # ---------- SETTINGS -----------------------------
-TRACKLIST_DIR = "tracklists"
+TRACKLIST_DIR = "tracklists_test"
 QUERYFILE_PATH = "queries.txt"
 SKIPPED_PATH = "skipped_queries.log"
 
@@ -76,20 +76,18 @@ def querify_tracklists(tracklist_dir, output_query_file):
 def sendseek():
     print("Seeking souls...")
 
-    global SLSK_USER, SLSK_PASS
+    global SLSK_USER, SLSK_PW
 
-    if not SLSK_USER or not SLSK_PASS:
+    if not SLSK_USER or not SLSK_PW:
         print("Soulseek credentials missing. Attempting to load from file...")
         try:
-            SLSK_USER, SLSK_PASS = load_cred(SLSK_CRED)
+            SLSK_USER, SLSK_PW = load_cred(SLSK_CRED)
             print(f"Loaded credentials from {SLSK_CRED}")
         except Exception as e:
             print(f"Error loading credentials: {e}")
-            return
-        else:
-          if SLSK_USER == "":
+        if SLSK_USER == "":
             SLSK_USER = input("Soulseek username: ")
-          if SLSK_PW == "":
+        if SLSK_PW == "":
             SLSK_PW = input("Soulseek password: ")
 
     else:
@@ -113,5 +111,3 @@ def sendseek():
 if __name__ == "__main__":
     querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)
     sendseek()
-
-
