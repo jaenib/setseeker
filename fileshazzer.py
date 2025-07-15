@@ -21,9 +21,6 @@ def split_audio(input_file, segment_length):
     base_name = os.path.splitext(os.path.basename(input_file))[0]
     segment_pattern = os.path.join(SEGMENTS_DIR, f"{base_name}_%03d.mp3")
 
-    ''' command = f'ffmpeg -i "{input_file}" -f segment -segment_time {segment_length} -ar 44100 -ac 2 -b:a 192k "{segment_pattern}"' '''
-    ''' command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -c copy \"{segment_pattern}\"" '''
-    ''' command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length}  -segment_format mp3 -codec:a libmp3lame -b:a 192k -ar 44100 -ac 2 \"{segment_pattern}\"" '''
     command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -segment_format mp3 -reset_timestamps 1 -map 0 -codec copy \"{segment_pattern}\""
 
     subprocess.run(command, shell=True, check=True)
