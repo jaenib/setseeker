@@ -33,8 +33,8 @@ def main():
     with open(out_path / "slsk.key", "wb") as f:
         f.write(key)
 
-    print(f"🔐 Encrypted credentials saved to {cr_file_path}")
-    print(f"🗝️  Key saved to {out_path}/slsk.key — don't share this!")
+    print(f"Encrypted credentials saved to {cr_file_path}")
+    print(f"Key saved to {out_path}/slsk.key — don't share this!")
 
 if __name__ == "__main__":
     main()
