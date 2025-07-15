@@ -86,9 +86,9 @@ def sendseek():
             print(f"Error loading credentials: {e}")
             return
         else:
-          if SLSK_USER == "" 
+          if SLSK_USER == "":
             SLSK_USER = input("Soulseek username: ")
-          if SLSK_PW == ""
+          if SLSK_PW == "":
             SLSK_PW = input("Soulseek password: ")
 
     else:
