@@ -54,11 +54,9 @@ async def recognize_tracks(segment_length):
 
     return track_list
 
-# ID all sets in "sets""
+# ID all sets in "sets"
 async def main(segment_length):
     sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
-    ''' segment_length = 30 '''
-    ''' segment_interval = 60 '''
 
     if not sets:
         print("Add MP3 files to the 'sets' folder.")
@@ -84,7 +82,7 @@ async def main(segment_length):
             for track in tracks:
                 f.write(track + "\n")
 
-        # Move set file to output directory
+        # Move set to outdir
         os.rename(os.path.join(INPUT_DIR, set_file), os.path.join(output_dir, set_file))
 
     print("\nFinal Tracklist:")
