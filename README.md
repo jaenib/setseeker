@@ -8,7 +8,7 @@ seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl c
 
 # setup
 
-execute setup.sh from command line as: <code> ./setup.sh </code>
+execute setup.sh from command line as: <code> chmod +x setup.sh </code> and <code> ./setup.sh </code>
 
 
 # run
@@ -17,7 +17,7 @@ Put MP3s into 'sets' folder.
 
 run all:
 
-  execute launcher.sh from command line as: <code> chmod +x setup.sh </code> and <code> ./launcher.sh </code> 
+  execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> 
 
 
 or run fileshazzer.py to process them, results will be in the 'tracklists' folder.
