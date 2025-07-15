@@ -110,7 +110,7 @@ def sendseek():
         print(f"Seek collapsed under {e}")
 
 if __name__ == "__main__":
-    querify_tracklists(TRACKLIST_PATH, QUERYFILE_PATH)
+    querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)
     sendseek()
 
 
