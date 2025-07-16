@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import glob
+import re
 
 # ---------- SETTINGS -----------------------------
 TRACKLIST_DIR = "tracklists"
@@ -31,35 +32,7 @@ def querify_tracklists(tracklist_dir, output_query_file):
 
     txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
     print(f"Found {len(txt_files)} .txt files in '{tracklist_dir}'")
-    import re
     
-    
-    
-        
-    
-            # Skip headers like "Final Tracklist:"
-            if not cleaned or cleaned.lower().startswith("final tracklist"):
-                skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")
-                continue
-    
-            # Only proceed if there's at least one hyphen
-            if '-' in cleaned:
-                # Split on first hyphen only
-                parts = cleaned.split('-', maxsplit=1)
-    
-                if len(parts) < 2:
-                    skipped.append(f"[{file_path}:{lineno}] TOO FEW PARTS -> {cleaned}")
-                    continue
-    
-                artist = parts[0].strip()
-                title = parts[1].strip()
-    
-                # Remove trailing format indicators (but keep remix etc.)
-                title = re.sub(r'\s+(320|FLAC)$', '', title, flags=re.IGNORECASE)
-    
-                if not is_queryfied(artist, title):
-                    skipped.append(f"[{file_path}:{lineno}] BAD FORMAT -> {cleaned}")
-                    continue
     
                 for format_type in ["mp3", "flac"]:
                     key = (artist.lower(), title.lower(), format_type)
@@ -86,7 +59,7 @@ def querify_tracklists(tracklist_dir, output_query_file):
             if not cleaned or cleaned.lower().startswith("final tracklist"):
                 skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")
                 continue
-
+    
             if '-' in cleaned:
                 parts = cleaned.split('-', maxsplit=1)
     
@@ -96,8 +69,6 @@ def querify_tracklists(tracklist_dir, output_query_file):
     
                 artist = parts[0].strip()
                 title = parts[1].strip()
-    
-                # Remove trailing format indicators (but keep remix etc.)
                 title = re.sub(r'\s+(320|FLAC)$', '', title, flags=re.IGNORECASE)
     
                 if not is_queryfied(artist, title):
