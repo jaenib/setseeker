@@ -33,21 +33,6 @@ def querify_tracklists(tracklist_dir, output_query_file):
     txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
     print(f"Found {len(txt_files)} .txt files in '{tracklist_dir}'")
     
-    
-                for format_type in ["mp3", "flac"]:
-                    key = (artist.lower(), title.lower(), format_type)
-                    if key not in seen:
-                        seen.add(key)
-    
-                        if format_type == "mp3":
-                            query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
-                        else:
-                            query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
-    
-                        queries.append(query_line)
-            else:
-                skipped.append(f"[{file_path}:{lineno}] NO HYPHEN -> {cleaned}")
-
     for file_path in txt_files:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
