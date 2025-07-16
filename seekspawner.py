@@ -4,12 +4,12 @@ import subprocess
 import glob
 
 # ---------- SETTINGS -----------------------------
-TRACKLIST_DIR = "tracklists_test"
+TRACKLIST_DIR = "tracklists"
 QUERYFILE_PATH = "queries.txt"
 SKIPPED_PATH = "skipped_queries.log"
 
 SLSKDL_EXECUTABLE = "slsk-batchdl-master/slsk-batchdl/bin/Release/net6.0/sldl.dll"
-SLSK_CRED = ""
+SLSK_CRED = "user"
 
 SLSK_USER = ""  # Fill in manually to skip loading
 SLSK_PW = ""  # Fill in manually to skip loading
@@ -31,6 +31,49 @@ def querify_tracklists(tracklist_dir, output_query_file):
 
     txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
     print(f"Found {len(txt_files)} .txt files in '{tracklist_dir}'")
+    import re
+    
+    
+    
+        
+    
+            # Skip headers like "Final Tracklist:"
+            if not cleaned or cleaned.lower().startswith("final tracklist"):
+                skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")
+                continue
+    
+            # Only proceed if there's at least one hyphen
+            if '-' in cleaned:
+                # Split on first hyphen only
+                parts = cleaned.split('-', maxsplit=1)
+    
+                if len(parts) < 2:
+                    skipped.append(f"[{file_path}:{lineno}] TOO FEW PARTS -> {cleaned}")
+                    continue
+    
+                artist = parts[0].strip()
+                title = parts[1].strip()
+    
+                # Remove trailing format indicators (but keep remix etc.)
+                title = re.sub(r'\s+(320|FLAC)$', '', title, flags=re.IGNORECASE)
+    
+                if not is_queryfied(artist, title):
+                    skipped.append(f"[{file_path}:{lineno}] BAD FORMAT -> {cleaned}")
+                    continue
+    
+                for format_type in ["mp3", "flac"]:
+                    key = (artist.lower(), title.lower(), format_type)
+                    if key not in seen:
+                        seen.add(key)
+    
+                        if format_type == "mp3":
+                            query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
+                        else:
+                            query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
+    
+                        queries.append(query_line)
+            else:
+                skipped.append(f"[{file_path}:{lineno}] NO HYPHEN -> {cleaned}")
 
     for file_path in txt_files:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -40,11 +83,23 @@ def querify_tracklists(tracklist_dir, output_query_file):
             original = line.strip()
             cleaned = re.sub(r'^\[\d{2}:\d{2}:\d{2}\]\s*', '', original)
 
-            if cleaned and '-' in cleaned:
-                parts = cleaned.rsplit('-', maxsplit=1)
-                artist = parts[0].strip()
-                title = re.sub(r'\s+(320|FLAC)$', '', parts[1].strip(), flags=re.IGNORECASE)
+            if not cleaned or cleaned.lower().startswith("final tracklist"):
+                skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")
+                continue
 
+            if '-' in cleaned:
+                parts = cleaned.split('-', maxsplit=1)
+    
+                if len(parts) < 2:
+                    skipped.append(f"[{file_path}:{lineno}] TOO FEW PARTS -> {cleaned}")
+                    continue
+    
+                artist = parts[0].strip()
+                title = parts[1].strip()
+    
+                # Remove trailing format indicators (but keep remix etc.)
+                title = re.sub(r'\s+(320|FLAC)$', '', title, flags=re.IGNORECASE)
+    
                 if not is_queryfied(artist, title):
                     skipped.append(f"[{file_path}:{lineno}] BAD FORMAT -> {cleaned}")
                     continue
@@ -56,10 +111,12 @@ def querify_tracklists(tracklist_dir, output_query_file):
 
                         if format_type == "mp3":
                             query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
+                            queries.append(query_line)
+                            
                         if format_type == "flac":
                             query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
+                            queries.append(query_line)
 
-                        queries.append(query_line)
             else:
                 skipped.append(f"[{file_path}:{lineno}] NO HYPHEN or EMPTY -> {cleaned}")
 
