@@ -4,14 +4,13 @@ import json
 import subprocess
 import glob
 import re
-from shazamio import Shazam
 from cryptography.fernet import Fernet
 
 
 # ---------- SETTINGS -----------------------------
 TRACKLIST_DIR = "tracklists"
 QUERYFILE_PATH = "tmp/queries/queries.txt"
-SKIPPED_PATH = "logsskipped_queries.log"
+SKIPPED_PATH = "logs/skipped_queries.log"
 
 SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
 SLSK_CRED = "user"  # Path to your Soulseek credentials file
@@ -22,7 +21,7 @@ SLSK_PW = ""  # Fill in manually to skip loading
 
 
 def load_cred(path):
-    cred_path=f"{path}/slsk_cred.json"
+    cred_path = f"{path}/slsk_cred.json"
     with open(cred_path, "r") as f:
         data = json.load(f)
     key_path = f"{path}/slsk.key"
@@ -130,7 +129,7 @@ def sendseek():
     '''
     #subprocess.run(command, env=env, check=True)
 
-    command = [#"source", "~/.zshrc","export", "DOTNET_ROOT=usr/local/share/dotnet", "&&", "export", "PATH=$DOTNET_ROOT:$PATH", "&&",
+    command = [
         "dotnet",
         SLSKDL_EXECUTABLE,
         QUERYFILE_PATH,

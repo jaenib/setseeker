@@ -11,6 +11,7 @@ setseek_venv/
 slsk-batchdl/
 spoils/
 tmp/
+.git/
 
 # Logs and databases #
 *.log

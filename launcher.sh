@@ -15,4 +15,4 @@ if [ $? -ne 0 ]; then
     echo "An error occurred while running the script."
     exit 1
 fi
-echo "seekspawner <b>SUCCESS</b>. Enjoy the spoils"
+echo -e "seekspawner \033[1mSUCCESS\033[0m. Enjoy the spoils"
