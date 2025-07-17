@@ -1,14 +1,15 @@
+import sys
 import os
 import subprocess
 import asyncio
 from shazamio import Shazam
 
 # Segment length in seconds
-segment_length = 30  # Default 30s go up if your set consists of longer tracks
+segment_length = 60  # Default 30s go up if your set consists of longer tracks
 
 # Directories
 INPUT_DIR = "sets"  # MP3 files
-SEGMENTS_DIR = "segments"
+SEGMENTS_DIR = "tmp/segments"
 OUT_DIR = "tracklists"
 
 os.makedirs(INPUT_DIR, exist_ok=True)
@@ -21,7 +22,8 @@ def split_audio(input_file, segment_length):
     base_name = os.path.splitext(os.path.basename(input_file))[0]
     segment_pattern = os.path.join(SEGMENTS_DIR, f"{base_name}_%03d.mp3")
 
-    command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -segment_format mp3 -reset_timestamps 1 -map 0 -codec copy \"{segment_pattern}\""
+    #command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -segment_format mp3 -reset_timestamps 1 -map 0 -codec copy \"{segment_pattern}\""
+    command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -ar 44100 -ac 2 -b:a 192k \"{segment_pattern}\""
 
     subprocess.run(command, shell=True, check=True)
 
@@ -91,4 +93,13 @@ async def main(segment_length):
 
 # Run
 if __name__ == "__main__":
+    # Check venv
+    expected_venv = os.path.abspath("setseek_venv")
+    actual_venv = os.environ.get("VIRTUAL_ENV", "")
+    
+    if not actual_venv or not actual_venv.startswith(expected_venv):
+        print("(I told you they'd forget..): Please activate the virtual environment with 'source setseek_venv/bin/activate' before running this script.")
+        sys.exit(1)
+
+    print("Virtual environment good. Shazzer sent...")
     asyncio.run(main(segment_length))

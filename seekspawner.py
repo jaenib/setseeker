@@ -1,26 +1,38 @@
+import sys
 import os
 import json
 import subprocess
 import glob
 import re
+from shazamio import Shazam
+from cryptography.fernet import Fernet
+
 
 # ---------- SETTINGS -----------------------------
 TRACKLIST_DIR = "tracklists"
-QUERYFILE_PATH = "queries.txt"
-SKIPPED_PATH = "skipped_queries.log"
+QUERYFILE_PATH = "tmp/queries/queries.txt"
+SKIPPED_PATH = "logsskipped_queries.log"
 
-SLSKDL_EXECUTABLE = "slsk-batchdl-master/slsk-batchdl/bin/Release/net6.0/sldl.dll"
-SLSK_CRED = "user"
+SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
+SLSK_CRED = "user"  # Path to your Soulseek credentials file
 
 SLSK_USER = ""  # Fill in manually to skip loading
 SLSK_PW = ""  # Fill in manually to skip loading
 # --------------------------------------------------
 
 
-def load_cred(filepath):
-    with open(filepath, 'r', encoding='utf-8') as f:
+def load_cred(path):
+    cred_path=f"{path}/slsk_cred.json"
+    with open(cred_path, "r") as f:
         data = json.load(f)
-    return data["username"], data["password"]
+    key_path = f"{path}/slsk.key"
+    with open(key_path, "rb") as f:
+        key = f.read()
+
+    fernet = Fernet(key)
+    username = data["username"]
+    password = fernet.decrypt(data["password_encrypted"].encode()).decode()
+    return username, password
 
 def is_queryfied(artist, title):
     return artist != "" and title != "" and "-" not in artist and '"' not in title
@@ -95,7 +107,7 @@ def sendseek():
         print("Soulseek credentials missing. Attempting to load from file...")
         try:
             SLSK_USER, SLSK_PW = load_cred(SLSK_CRED)
-            print(f"Loaded credentials from {SLSK_CRED}")
+            print(f"Loaded credentials from {SLSK_USER}")
         except Exception as e:
             print(f"Error loading credentials: {e}")
         if SLSK_USER == "":
@@ -104,23 +116,47 @@ def sendseek():
             SLSK_PW = input("Soulseek password: ")
 
     else:
-        print(f"Using provided Soulseek credentials: {SLSK_USER}")
+        print(f"Accessing Soulseek as {SLSK_USER}")
 
-    command = [
+    env = os.environ.copy()
+    env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
+    env["PATH"] = f'{env["DOTNET_ROOT"]}:{env["PATH"]}'
+
+    '''
+    command = ["dotnet", "--list-sdks",
+               "DOTNET_ROOT=usr/local/share/dotnet",
+               "PATH=$DOTNET_ROOT:$PATH",
+               "dotnet", "--list-sdks"]
+    '''
+    #subprocess.run(command, env=env, check=True)
+
+    command = [#"source", "~/.zshrc","export", "DOTNET_ROOT=usr/local/share/dotnet", "&&", "export", "PATH=$DOTNET_ROOT:$PATH", "&&",
         "dotnet",
         SLSKDL_EXECUTABLE,
         QUERYFILE_PATH,
         "--user", SLSK_USER,
         "--pass", SLSK_PW,
-        "--input-type=list"
+        "--input-type=list",
+        "--path", "spoils",
     ]
 
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, env=env, check=True)
         print("Seek concluded")
     except subprocess.CalledProcessError as e:
         print(f"Seek collapsed under {e}")
 
 if __name__ == "__main__":
+    # Check venv
+    expected_venv = os.path.abspath("setseek_venv")
+    actual_venv = os.environ.get("VIRTUAL_ENV", "")
+    
+    if not actual_venv or not actual_venv.startswith(expected_venv):
+        print("(I told you they'd forget..): Please activate the virtual environment with 'source setseek_venv/bin/activate' before running this script.")
+        sys.exit(1)
+
+    print("Virtual environment good. Seeker spawned")
+
+    # GO
     querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)
     sendseek()

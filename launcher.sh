@@ -1,5 +1,9 @@
 # launcher.sh
 source setseek_venv/bin/activate
+
+export DOTNET_ROOT=/usr/local/share/dotnet
+export PATH=$DOTNET_ROOT:$PATH
+
 python fileshazzer.py "$@"
 if [ $? -ne 0 ]; then
     echo "An error occurred while running the script."
@@ -11,4 +15,4 @@ if [ $? -ne 0 ]; then
     echo "An error occurred while running the script."
     exit 1
 fi
-echo "seekspawner spawned successfully. Enjoy the spoils"
+echo "seekspawner <b>SUCCESS</b>. Enjoy the spoils"

@@ -29,6 +29,10 @@ else
     echo ".NET SDK found"
 fi
 
+export DOTNET_ROOT=/usr/local/share/dotnet
+export PATH=$DOTNET_ROOT:$PATH
+echo "Setting up .NET environment variables DOTNET_ROOT and PATH..."
+
 # 3. Clone slsk-batchdl if not present
 if [ ! -d "slsk-batchdl" ]; then
     echo "Cloning slsk-batchdl..."
@@ -44,7 +48,7 @@ dotnet build -c Release
 cd ../..
 
 # 5. Setup default folders
-mkdir -p  sets tracklists spoils user logs temp/segments temp/queries
+mkdir -p  sets tracklists spoils user logs tmp/segments tmp/queries
 
 # 6. Prompt to create Soulseek credentials file
 
