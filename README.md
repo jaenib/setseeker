@@ -14,19 +14,13 @@ execute setup.sh from command line:
 
 <br>what it does:
 
-&nbsp; - creates a new virtual environment with a fresh python installation that is independent from the main environment
+&nbsp; -- creates a new virtual environment with a fresh python installation that is independent from the main environment
 
-&nbsp; - installs all required python modules there
+&nbsp; -- installs all required python modules there
 
-<br>you need to activate that virtual environment with 
+&nbsp; -- creates the folders
 
-<code> source shaz_venv/bin/activate  </code>
-
-&nbsp;&nbsp;&nbsp;&nbsp;before running<br>
-
-&nbsp; - creates the folders
-
-&nbsp; - there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
+&nbsp; -- there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
 
 this step is skippable and you can store them later or enter them every time. 
 
@@ -43,8 +37,12 @@ Put MP3s into 'sets' folder.
 
 &nbsp; - execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> <br>
 
+<br>activate that virtual environment with 
 
-<br>or run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
+<code> source shaz_venv/bin/activate  </code>
+
+
+<br>altternatively run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
 
 &nbsp; - If the code seems stuck be patient, its shazam api limiting calls, it will continue.<br>
 
