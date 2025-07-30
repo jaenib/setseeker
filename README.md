@@ -12,7 +12,7 @@ execute setup.sh from command line:
 
 <code> chmod +x setup.sh </code> then <code> ./setup.sh </code>
 
-what it does:
+<br>what it does:
 
 &nbsp; - creates a new virtual environment with a fresh python installation that is independent from the main environment
 
@@ -20,9 +20,9 @@ what it does:
 
 <br>you need to activate that virtual environment with 
 
-<br><code> source shaz_venv/bin/activate  </code>
+<code> source shaz_venv/bin/activate  </code>
 
-<br>before running
+&nbsp;&nbsp;&nbsp;&nbsp;before running<br>
 
 &nbsp; - creates the folders
 
