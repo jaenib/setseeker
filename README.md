@@ -8,9 +8,29 @@ seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl c
 
 # setup
 
-execute setup.sh from command line as: <code> chmod +x setup.sh </code> and <code> ./setup.sh </code>
+execute setup.sh from command line: 
 
-there is a skippable prompt to enter your soulseek credentials
+<code> chmod +x setup.sh </code> then <code> ./setup.sh </code>
+
+what it does:
+
+&nbsp; - creates a new virtual environment with a fresh python installation that is independent from the main environment
+
+&nbsp; - installs all required python modules there
+
+<br>you need to activate that virtual environment with 
+
+<br><code> source shaz_venv/bin/activate  </code>
+
+<br>before running
+
+&nbsp; - creates the folders
+
+&nbsp; - there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
+
+this step is skippable and you can store them later or enter them every time. 
+
+
 
 
 
@@ -19,12 +39,12 @@ there is a skippable prompt to enter your soulseek credentials
 Put MP3s into 'sets' folder.
 
 
-run all:
+<run all:
 
-&nbsp; - execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> 
+&nbsp; - execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> <br>
 
 
-or run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
+<br>or run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
 
 &nbsp; - If the code seems stuck be patient, its shazam api limiting calls, it will continue.<br>
 
@@ -35,9 +55,9 @@ or run fileshazzer.py for trackID only, results will be in the 'tracklists' fold
 &nbsp;&nbsp; - Default 30s go up if your tracklists get more than 4 instances of the same id / things are taking too long.
    
 
-or run setshazzer.py for download only
+<br>or run <code>python3.11 seekspawner.py </code> for download only
 
-&nbsp; - needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt
+&nbsp; - needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt (that matches the formatting below)
 
   
 
