@@ -14,15 +14,15 @@ execute setup.sh from command line:
 
 <br>what it does:
 
-&nbsp; -- creates a new virtual environment with a fresh python installation that is independent from the main environment
+&nbsp; - creates a new virtual environment with a fresh python installation that is independent from the main environment
 
-&nbsp; -- installs all required python modules there
+&nbsp; - installs all required python modules there
 
-&nbsp; -- creates the folders
+&nbsp; - creates the folders
 
-&nbsp; -- there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
+&nbsp; - there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
 
-this step is skippable and you can store them later or enter them every time. 
+&nbsp;&nbsp; this step is skippable and you can store them later or enter them every time. 
 
 
 
@@ -30,30 +30,33 @@ this step is skippable and you can store them later or enter them every time.
 
 # run
 
-Put MP3s into 'sets' folder.
+1. Put MP3s into 'sets' folder.<br>
+2. activate the virtual python environment with 
+
+&nbsp;&nbsp;  terminal: <code> source shaz_venv/bin/activate  </code>
 
 
-<run all:
+<br>### to get track IDs and download them from soulseek, run all:
 
-&nbsp; - execute launcher.sh from command line as: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> <br>
-
-<br>activate that virtual environment with 
-
-<code> source shaz_venv/bin/activate  </code>
+&nbsp; terminal: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> <br>
 
 
-<br>altternatively run fileshazzer.py for trackID only, results will be in the 'tracklists' folder.
+<br>### to get a list with track IDs, run fileshazzer:
+
+terminal: <code>python3.11 fileshazzer.py </code>
 
 &nbsp; - If the code seems stuck be patient, its shazam api limiting calls, it will continue.<br>
 
-&nbsp;  Bad results? 
+&nbsp; - Bad results? 
 
 &nbsp;&nbsp; - find segment_length variable at the top of fileshazzer.py and change it.
   
 &nbsp;&nbsp; - Default 30s go up if your tracklists get more than 4 instances of the same id / things are taking too long.
    
 
-<br>or run <code>python3.11 seekspawner.py </code> for download only
+<br>### you already have tracklist in the proper format and want to (re)attempt soulseek donwload
+
+terminal: <code>python3.11 seekspawner.py </code> 
 
 &nbsp; - needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt (that matches the formatting below)
 
