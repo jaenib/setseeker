@@ -1,2 +1,3 @@
 shazamio
 cryptography
+ffmpeg
