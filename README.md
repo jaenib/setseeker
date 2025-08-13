@@ -4,11 +4,19 @@ fileshazzer.py - Takes DJ sets (or any MP3) splitting them into shazamable segme
 
 seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required.
 
+## Requirements
 
+- Python 3.11
+- [`ffmpeg`](https://ffmpeg.org/) command line tool
+- [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) (for building `slsk-batchdl`)
 
 # setup
+`setup.sh` attempts to install `ffmpeg` and the .NET SDK automatically on macOS and Debian/Ubuntu. If the script reports that .NET is still missing, install it manually and re-run `./setup.sh`.
 
 execute setup.sh from command line: 
+## setup
+
+execute setup.sh from command line:
 
 <code> chmod +x setup.sh </code> then <code> ./setup.sh </code>
 
@@ -21,8 +29,10 @@ execute setup.sh from command line:
 &nbsp; - creates the folders
 
 &nbsp; - there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
+&nbsp; - prompts for your soulseek credentials and stores them encrypted (set `SLSK_USERNAME` and `SLSK_PASSWORD` env vars to skip the prompt)
 
 &nbsp;&nbsp; this step is skippable and you can store them later or enter them every time. 
+&nbsp;&nbsp; this step is skippable and you can store them later or enter them every time.
 
 
 
@@ -32,8 +42,10 @@ execute setup.sh from command line:
 
 1. Put MP3s into 'sets' folder.<br>
 2. activate the virtual python environment with 
+2. activate the virtual python environment with
 
 &nbsp;&nbsp;  terminal: <code> source shaz_venv/bin/activate  </code>
+&nbsp;&nbsp;  terminal: <code> source setseek_venv/bin/activate  </code>
 
 
 <br>### to get track IDs and download them from soulseek, run all:
@@ -55,6 +67,7 @@ terminal: <code>python3.11 fileshazzer.py </code>
    
 
 <br>### you already have tracklist in the proper format and want to (re)attempt soulseek donwload
+<br>### you already have tracklist in the proper format and want to (re)attempt soulseek download
 
 terminal: <code>python3.11 seekspawner.py </code> 
 
@@ -73,4 +86,3 @@ Final Tracklist:<br>
 [00:23:30] R.A.W. - Unbe (Erick 'More' Mix)<br>
 [00:24:00] Terrace - Magic O<br>
 ...etc
-
