@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔧 Setting up your Soulseek track downloader..."
+echo "Setting up your Soulseek track downloader..."
 
 # 1. Create Python virtual environment
 if [ ! -d "setseek_venv" ]; then
