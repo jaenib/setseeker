@@ -10,10 +10,8 @@ seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl c
 - [`ffmpeg`](https://ffmpeg.org/) command line tool
 - [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) (for building `slsk-batchdl`)
 
-# setup
 `setup.sh` attempts to install `ffmpeg` and the .NET SDK automatically on macOS and Debian/Ubuntu. If the script reports that .NET is still missing, install it manually and re-run `./setup.sh`.
 
-execute setup.sh from command line: 
 ## setup
 
 execute setup.sh from command line:
@@ -28,10 +26,8 @@ execute setup.sh from command line:
 
 &nbsp; - creates the folders
 
-&nbsp; - there is prompt to enter your soulseek credentials so it can store them encrypted, so the main module can later use them to access soulseek
 &nbsp; - prompts for your soulseek credentials and stores them encrypted (set `SLSK_USERNAME` and `SLSK_PASSWORD` env vars to skip the prompt)
 
-&nbsp;&nbsp; this step is skippable and you can store them later or enter them every time. 
 &nbsp;&nbsp; this step is skippable and you can store them later or enter them every time.
 
 
@@ -41,10 +37,8 @@ execute setup.sh from command line:
 # run
 
 1. Put MP3s into 'sets' folder.<br>
-2. activate the virtual python environment with 
 2. activate the virtual python environment with
 
-&nbsp;&nbsp;  terminal: <code> source shaz_venv/bin/activate  </code>
 &nbsp;&nbsp;  terminal: <code> source setseek_venv/bin/activate  </code>
 
 
@@ -66,7 +60,6 @@ terminal: <code>python3.11 fileshazzer.py </code>
 &nbsp;&nbsp; - Default 30s go up if your tracklists get more than 4 instances of the same id / things are taking too long.
    
 
-<br>### you already have tracklist in the proper format and want to (re)attempt soulseek donwload
 <br>### you already have tracklist in the proper format and want to (re)attempt soulseek download
 
 terminal: <code>python3.11 seekspawner.py </code> 
