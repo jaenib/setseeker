@@ -72,6 +72,7 @@ if [ "$dotnet_missing" = false ]; then
     (cd slsk-batchdl/slsk-batchdl && dotnet build -c Release)
 else
     echo "Skipping slsk-batchdl build due to missing .NET."
+fi
 
 # 5. Prompt to create Soulseek credentials file
 if [ ! -f "user/slsk_cred.json" ]; then
@@ -81,7 +82,6 @@ if [ ! -f "user/slsk_cred.json" ]; then
         python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "user"
         echo "Credentials stored from environment variables."
     else
-        echo "Ok Schwurbli, You'll be prompted to enter credentials every time when running seekspawner."
         echo "Enter Soulseek credentials now to store them (or skip to provide at runtime)."
         read -p "Enter and store now? (Y/n) " answer
         answer=${answer:-Y}  # default to 'Y' if empty
