@@ -111,7 +111,7 @@ else
 fi
 
 if [ "$dotnet_missing" = true ]; then
-    echo "⚠️  slsk-batchdl not built. Install .NET 6 SDK and re-run setup.sh."
+    echo "!! slsk-batchdl not built. Install .NET 6 SDK and re-run setup.sh. !!"
 fi
 
 echo "setseek setup success"
