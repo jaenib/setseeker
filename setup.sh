@@ -15,7 +15,7 @@ source setseek_venv/bin/activate
 echo "Acitvated venv, Python is:"
 which python
 pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 2. Ensure ffmpeg is available
 if ! command -v ffmpeg &> /dev/null; then
