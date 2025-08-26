@@ -106,6 +106,7 @@ else
         read -p "Enter your Soulseek username: " username
         read -s -p "Enter your Soulseek password: " password
         echo ""
+        source .venv/bin/activate
         python3 crencrypt.py "$username" "$password" "user"
     else
         echo "Keeping existing credentials."
