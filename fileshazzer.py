@@ -94,7 +94,7 @@ async def main(segment_length):
 # Run
 if __name__ == "__main__":
     # Check venv
-    expected_venv = os.path.abspath("setseek_venv")
+    expected_venv = os.path.abspath(".venv")
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
     
     if not actual_venv or not actual_venv.startswith(expected_venv):
