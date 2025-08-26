@@ -117,5 +117,6 @@ if [ "$dotnet_missing" = true ]; then
 fi
 
 echo "setseek setup success"
+echo "continue by adding mp3 to folder: sets, or add soundcloud-urls to fileshazzer.py"
 #echo "Always activate the virtual environment with:"
 #echo "   source setseek_venv/bin/activate"
