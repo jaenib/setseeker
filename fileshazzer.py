@@ -6,6 +6,7 @@ from shazamio import Shazam
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
+soundcloud_url = "https://soundcloud.com/xplore_music/xplrcast07-civic3mille"  # Example URL
 
 # Directories
 INPUT_DIR = "sets"  # MP3 files
@@ -94,7 +95,7 @@ async def main(segment_length):
 # Run
 if __name__ == "__main__":
     # Check venv
-    expected_venv = os.path.abspath("setseek_venv")
+    expected_venv = os.path.abspath(".venv")
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
     
     if not actual_venv or not actual_venv.startswith(expected_venv):
@@ -102,4 +103,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print("Virtual environment good. Shazzer sent...")
+    scdl.main(soundcloud_url)
     asyncio.run(main(segment_length))

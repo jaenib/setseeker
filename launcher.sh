@@ -1,5 +1,5 @@
 # launcher.sh
-source setseek_venv/bin/activate
+source .venv/bin/activate
 
 export DOTNET_ROOT=/usr/local/share/dotnet
 export PATH=$DOTNET_ROOT:$PATH

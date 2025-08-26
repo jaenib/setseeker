@@ -1,19 +1,21 @@
 #!/bin/bash
 
-echo "🔧 Setting up your Soulseek track downloader..."
+echo "Setting up your Soulseek track downloader..."
 
 # 1. Create Python virtual environment
-if [ ! -d "setseek_venv" ]; then
+if [ ! -d ".venv" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv setseek_venv
+    python3 -m venv .venv
 else
     echo "Python virtual environment already exists."
 fi
 
 echo "Activating venv and installing Python dependencies..."
-source setseek_venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+source .venv/bin/activate
+echo "Acitvated venv, Python is:"
+which python
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # 2. Ensure ffmpeg is available
 if ! command -v ffmpeg &> /dev/null; then
@@ -76,7 +78,6 @@ else
 fi
 
 # 5. Prompt to create Soulseek credentials file
-
 if [ ! -f "user/slsk_cred.json" ]; then
     echo "Soulseek credentials are stored encrypted at user/slsk_cred.json"
     echo "You can remove this file to reset them later."
@@ -106,6 +107,7 @@ else
         read -p "Enter your Soulseek username: " username
         read -s -p "Enter your Soulseek password: " password
         echo ""
+        source .venv/bin/activate
         python3 crencrypt.py "$username" "$password" "user"
     else
         echo "Keeping existing credentials."
@@ -113,9 +115,10 @@ else
 fi
 
 if [ "$dotnet_missing" = true ]; then
-    echo "⚠️  slsk-batchdl not built. Install .NET 6 SDK and re-run setup.sh."
+    echo "!! slsk-batchdl not built. Install .NET 6 SDK and re-run setup.sh. !!"
 fi
 
 echo "setseek setup success"
+echo "continue by adding mp3 to folder: sets, or add soundcloud-urls to fileshazzer.py"
 #echo "Always activate the virtual environment with:"
 #echo "   source setseek_venv/bin/activate"

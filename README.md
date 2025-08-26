@@ -1,6 +1,6 @@
 # setseeker
 
-fileshazzer.py - Takes DJ sets (or any MP3) splitting them into shazamable segments. Returns a list of timestamped track IDs in plain text.
+fileshazzer.py - Takes DJ sets (or any MP3) and/or soundcloud links to split them into shazamable segments. Returns a list of timestamped track IDs in plain text.
 
 seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required.
 
@@ -20,7 +20,7 @@ execute setup.sh from command line:
 
 <br>what it does:
 
-&nbsp; - creates a new virtual environment with a fresh python installation that is independent from the main environment
+&nbsp; - creates a new virtual environment (.venv) with a fresh python installation that is independent from the main environment
 
 &nbsp; - installs all required python modules there
 
@@ -39,7 +39,8 @@ execute setup.sh from command line:
 1. Put MP3s into 'sets' folder.<br>
 2. activate the virtual python environment with
 
-&nbsp;&nbsp;  terminal: <code> source setseek_venv/bin/activate  </code>
+=======
+&nbsp;&nbsp;  terminal: <code> source .venv/bin/activate  </code>
 
 
 <br>### to get track IDs and download them from soulseek, run all:
@@ -79,4 +80,3 @@ Final Tracklist:<br>
 [00:23:30] R.A.W. - Unbe (Erick 'More' Mix)<br>
 [00:24:00] Terrace - Magic O<br>
 ...etc
-
