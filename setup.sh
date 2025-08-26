@@ -12,6 +12,8 @@ fi
 
 echo "Activating venv and installing Python dependencies..."
 source setseek_venv/bin/activate
+echo "Acitvated venv, Python is:"
+which python
 pip install --upgrade pip
 pip install -r requirements.txt
 
