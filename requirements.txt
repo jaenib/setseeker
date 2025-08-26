@@ -1,3 +1,4 @@
 shazamio
 cryptography
+soundcloud-lib
 ffmpeg
