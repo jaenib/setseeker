@@ -39,6 +39,7 @@ execute setup.sh from command line:
 1. Put MP3s into 'sets' folder.<br>
 2. activate the virtual python environment with
 
+=======
 &nbsp;&nbsp;  terminal: <code> source .venv/bin/activate  </code>
 
 

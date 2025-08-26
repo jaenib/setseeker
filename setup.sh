@@ -69,6 +69,7 @@ if [ "$dotnet_missing" = false ]; then
     else
         echo "slsk-batchdl already cloned."
     fi
+
     # Build slsk-batchdl
     echo "🔨 Building slsk-batchdl..."
     (cd slsk-batchdl/slsk-batchdl && dotnet build -c Release)
