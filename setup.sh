@@ -3,7 +3,7 @@
 echo "Setting up your Soulseek track downloader..."
 
 # 1. Create Python virtual environment
-if [ ! -d "setseek_venv" ]; then
+if [ ! -d ".venv" ]; then
     echo "Creating Python virtual environment..."
     python3 -m venv .venv
 else
