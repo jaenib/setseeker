@@ -14,6 +14,7 @@ echo "Activating venv and installing Python dependencies..."
 source .venv/bin/activate
 echo "Acitvated venv, Python is:"
 which python
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
 # 2. Ensure ffmpeg is available
