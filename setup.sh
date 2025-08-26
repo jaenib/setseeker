@@ -5,13 +5,13 @@ echo "Setting up your Soulseek track downloader..."
 # 1. Create Python virtual environment
 if [ ! -d "setseek_venv" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv setseek_venv
+    python3 -m venv .venv
 else
     echo "Python virtual environment already exists."
 fi
 
 echo "Activating venv and installing Python dependencies..."
-source setseek_venv/bin/activate
+source .venv/bin/activate
 echo "Acitvated venv, Python is:"
 which python
 pip install --upgrade pip
