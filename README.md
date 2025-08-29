@@ -1,6 +1,6 @@
 # setseeker
 
-fileshazzer.py - Takes DJ sets (or any MP3) and/or soundcloud links to split them into shazamable segments. Returns a list of timestamped track IDs in plain text.
+fileshazzer.py - Takes DJ sets (or any MP3) and/or soundcloud links to split them into segments. Then shazam is used gReturns a list of timestamped track IDs in plain text.
 
 seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required.
 
@@ -36,7 +36,7 @@ execute setup.sh from command line:
 
 # run
 
-1. Put MP3s into 'sets' folder.<br>
+1. Either: Put MP3s into 'sets' folder.<br> Or: Add a soundcloud link.<br>
 2. activate the virtual python environment with
 
 =======
