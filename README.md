@@ -2,7 +2,7 @@
 
 fileshazzer.py - Takes DJ sets (or any MP3) and/or soundcloud links to split them into segments. Then shazam is used to ID each segment. Returns a list of timestamped track IDs in plain text.
 
-seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required.
+seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required. (If you don't have one, it's creating one with User/PW that you set)
 
 ## Requirements
 
