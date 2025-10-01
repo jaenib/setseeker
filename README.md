@@ -1,82 +1,83 @@
 # setseeker
 
-fileshazzer.py - Takes DJ sets (or any MP3) and/or soundcloud links to split them into segments. Then shazam is used to ID each segment. Returns a list of timestamped track IDs in plain text.
-
-seekspawner.py - Seeks and downloads the tracks on soulseek using slsk-batchdl command line tool. Soulseek login required. (If you don't have one, it's creating one with User/PW that you set)
+`fileshazzer.py` splits DJ sets (or any MP3 you throw at it) into segments, runs them through Shazam, and spits out a timestamped tracklist. `seekspawner.py` takes those IDs and hunts the files down on Soulseek via [`slsk-batchdl`](https://github.com/fiso64/slsk-batchdl). Bring your own Soulseek credentials (setup will store them for you).
 
 ## Requirements
 
 - Python 3.11
-- [`ffmpeg`](https://ffmpeg.org/) command line tool
-- [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) (for building `slsk-batchdl`)
+- [`ffmpeg`](https://ffmpeg.org/) command line tool available on your `$PATH`
+- [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) so we can build `slsk-batchdl`
+- `git` (only needed the first time `setup.sh` clones `slsk-batchdl`)
 
-`setup.sh` attempts to install `ffmpeg` and the .NET SDK automatically on macOS and Debian/Ubuntu. If the script reports that .NET is still missing, install it manually and re-run `./setup.sh`.
+`setup.sh` tries to install `ffmpeg` and the .NET SDK for you on macOS or Debian/Ubuntu. If you're on anything else (or the script still complains that .NET is missing), install those pieces manually, then rerun `./setup.sh`.
 
-## setup
+## Setup
 
-execute setup.sh from command line:
+From the repo root:
 
-<code> chmod +x setup.sh </code> then <code> ./setup.sh </code>
+```
+chmod +x setup.sh
+./setup.sh
+```
 
-<br>what it does:
+What that script takes care of:
 
-&nbsp; - creates a new virtual environment (.venv) with a fresh python installation that is independent from the main environment
+- Creates a fresh virtual environment at `.venv` and installs `requirements.txt`
+- Checks for `ffmpeg`; will try to install it if the binary isn't found
+- Makes sure `.NET 6` is around, then clones and builds `slsk-batchdl` into `slsk-batchdl/slsk-batchdl/bin/Release`
+- Sets up the working folders: `sets`, `tracklists`, `spoils`, `user`, `logs`, `tmp/segments`, `tmp/queries`
+- Stores encrypted Soulseek credentials at `user/slsk_cred.json` + `user/slsk.key` (set `SLSK_USERNAME` and `SLSK_PASSWORD` in your shell to skip the prompt)
 
-&nbsp; - installs all required python modules there
+You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild `slsk-batchdl` if needed.
 
-&nbsp; - creates the folders
+## Run it
 
-&nbsp; - prompts for your soulseek credentials and stores them encrypted (set `SLSK_USERNAME` and `SLSK_PASSWORD` env vars to skip the prompt)
+1. Drop MP3s into `sets/` or point `fileshazzer.py` at a SoundCloud link (the `soundcloud_url` variable near the top).
+2. Activate the virtualenv:
 
-&nbsp;&nbsp; this step is skippable and you can store them later or enter them every time.
+   ```
+   source .venv/bin/activate
+   ```
 
+3. Pick your workflow:
 
+   - **Full pipeline (Shazam + Soulseek download)**
 
+     ```
+     chmod +x launcher.sh
+     ./launcher.sh
+     ```
 
+     `launcher.sh` activates the venv, runs `fileshazzer.py`, then immediately hands the fresh queries to `seekspawner.py`.
 
-# run
+   - **Just fingerprint and build tracklists**
 
-1. Either: Put MP3s into 'sets' folder.<br> Or: Add a soundcloud link.<br>
-2. activate the virtual python environment with
+     ```
+     python3.11 fileshazzer.py
+     ```
 
+     Tracklists (and their original MP3s) end up under `tracklists/<set_name>/`. If Shazam throttles and things look frozen, give it a minute—it will continue. Want more reliable matches? Bump `segment_length` (default `60` seconds) at the top of the script so each chunk contains more audio.
 
-&nbsp;&nbsp;  terminal: <code> source .venv/bin/activate  </code>
+   - **Already have a tracklist and only need Soulseek**
 
+     ```
+     python3.11 seekspawner.py
+     ```
 
-<br>### to get track IDs and download them from soulseek, run all:
+     The script looks for `*.txt` tracklists under `tracklists/`, parses them into `tmp/queries/queries.txt`, and fires those queries at Soulseek. You can drop your own tracklist files in there as long as they follow the same `[hh:mm:ss] Artist - Title` format.
 
-&nbsp; terminal: <code> chmod +x launcher.sh </code> and <code> ./launcher.sh </code> <br>
+`seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
 
+## Example tracklist output
 
-<br>### to get a list with track IDs, run fileshazzer:
-
-terminal: <code>python3.11 fileshazzer.py </code>
-
-&nbsp; - If the code seems stuck be patient, its shazam api limiting calls, it will continue.<br>
-
-&nbsp; - Bad results? 
-
-&nbsp;&nbsp; - find segment_length variable at the top of fileshazzer.py and change it.
-  
-&nbsp;&nbsp; - Default 30s go up if your tracklists get more than 4 instances of the same id / things are taking too long.
-   
-
-<br>### you already have tracklist in the proper format and want to (re)attempt soulseek download
-
-terminal: <code>python3.11 seekspawner.py </code> 
-
-&nbsp; - needs a previous run of fileshazzer that yielded a tracklist or a manually added tracklist.txt (that matches the formatting below)
-
-  
-
-# example  tracklist result
-
-Final Tracklist:<br>
-[00:01:00] Umek - Center of Gravity<br>
-[00:13:30] Sade - Like Tattoo<br>
-[00:21:00] Zimmie Gix - Absolute Chill<br>
-[00:21:30] Andrea Frisina & Irregular Synth - Dub City<br>
-[00:22:00] Alan Fitzpatrick - Brian's Proper Dun One<br>
-[00:23:30] R.A.W. - Unbe (Erick 'More' Mix)<br>
-[00:24:00] Terrace - Magic O<br>
+```
+Final Tracklist:
+[00:01:00] Umek - Center of Gravity
+[00:13:30] Sade - Like Tattoo
+[00:21:00] Zimmie Gix - Absolute Chill
+[00:21:30] Andrea Frisina & Irregular Synth - Dub City
+[00:22:00] Alan Fitzpatrick - Brian's Proper Dun One
+[00:23:30] R.A.W. - Unbe (Erick 'More' Mix)
+[00:24:00] Terrace - Magic O
 ...etc
+```
