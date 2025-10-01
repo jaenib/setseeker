@@ -39,7 +39,7 @@ execute setup.sh from command line:
 1. Either: Put MP3s into 'sets' folder.<br> Or: Add a soundcloud link.<br>
 2. activate the virtual python environment with
 
-=======
+
 &nbsp;&nbsp;  terminal: <code> source .venv/bin/activate  </code>
 
 
