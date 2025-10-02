@@ -3,6 +3,7 @@ import os
 import subprocess
 import asyncio
 from shazamio import Shazam
+import scdl
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     
     if not sets:
         print("No MP3 files in 'sets' folder.\n")
-        if souncloud_url == "":
+        if soundcloud_url == "":
             print("No links provided yet either\n")
             answer = input("- To continue paste a soundcloud link ↵\n-To roll with my recommendation instead, type 'r' ↵\n-To quit, type 'q' ↵").lower()
             if answer.lower() == ("r"):
