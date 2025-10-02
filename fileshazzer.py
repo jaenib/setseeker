@@ -6,7 +6,7 @@ from shazamio import Shazam
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
-soundcloud_url = "https://soundcloud.com/accceler/strobilate-16082020"  # Example URL
+soundcloud_url = ""  # Example URL
 
 # Directories
 INPUT_DIR = "sets"  # MP3 files
@@ -62,7 +62,7 @@ async def main(segment_length):
     sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
 
     if not sets:
-        print("Add MP3 files to the 'sets' folder.")
+        print("No MP3 files found in 'sets' folder.\n")
         return
 
     for set_file in sets:
@@ -102,6 +102,23 @@ if __name__ == "__main__":
         print("(I told you they'd forget..): Please activate the virtual environment with 'source setseek_venv/bin/activate' before running this script.")
         sys.exit(1)
 
-    print("Virtual environment good. Shazzer sent...")
+    print("Virtual environment good. Locating set files...")
+
+    sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
+    
+    if not sets:
+        print("No MP3 files in 'sets' folder.\n")
+        if souncloud_url == "":
+            print("No links provided yet either\n")
+            answer = input("- To continue paste a soundcloud link ↵\n-To roll with my recommendation instead, type 'r' ↵\n-To quit, type 'q' ↵").lower()
+            if answer.lower() == ("r"):
+                print("You'll regret nothing")
+                soundcloud_url = "https://soundcloud.com/accceler/strobilate-16082020"
+            elif answer.lower() == ("q"):
+                print("weak")
+                quit()
+            else:
+                soundcloud_url = str(answer)
+    
     scdl.main(soundcloud_url)
     asyncio.run(main(segment_length))
