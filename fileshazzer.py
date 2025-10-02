@@ -6,7 +6,7 @@ from shazamio import Shazam
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
-soundcloud_url = "https://soundcloud.com/xplore_music/xplrcast07-civic3mille"  # Example URL
+soundcloud_url = "https://soundcloud.com/accceler/strobilate-16082020"  # Example URL
 
 # Directories
 INPUT_DIR = "sets"  # MP3 files
