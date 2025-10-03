@@ -121,5 +121,5 @@ if __name__ == "__main__":
             else:
                 soundcloud_url = str(answer)
     
-    scdl.main(soundcloud_url)
+        scdl.main(soundcloud_url)
     asyncio.run(main(segment_length))
