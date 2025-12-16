@@ -1,6 +1,6 @@
 # setseeker
 
-`fileshazzer.py` splits DJ sets (or any MP3 you throw at it) into segments, runs them through Shazam, and spits out a timestamped tracklist. `seekspawner.py` takes those IDs and hunts the files down on Soulseek via [`slsk-batchdl`](https://github.com/fiso64/slsk-batchdl). Bring your own Soulseek credentials (setup will store them for you).
+`fileshazzer.py` splits DJ sets (or any MP3 you throw at it) into segments, runs them through Shazam, and spits out a timestamped tracklist. `seekspawner.py` takes those IDs and hunts the files down on Soulseek via [`slsk-batchdl`](https://github.com/fiso64/slsk-batchdl). Bring your own Soulseek credentials (setup will store them for you), or create new ones if you don't have them
 
 ## Requirements
 
