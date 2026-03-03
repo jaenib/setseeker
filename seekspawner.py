@@ -1,9 +1,11 @@
-import sys
 import os
 import json
 import subprocess
 import glob
 import re
+import shutil
+from getpass import getpass
+from pathlib import Path
 from cryptography.fernet import Fernet
 
 
@@ -13,18 +15,27 @@ QUERYFILE_PATH = "tmp/queries/queries.txt"
 SKIPPED_PATH = "logs/skipped_queries.log"
 
 SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
-SLSK_CRED = "user"  # Path to your Soulseek credentials file
+CREDENTIAL_DIR = Path("user")
+LEGACY_CREDENTIAL_DIRS = [Path("../user")]
 
 SLSK_USER = ""  # Fill in manually to skip loading
 SLSK_PW = ""  # Fill in manually to skip loading
 # --------------------------------------------------
 
 
-def load_cred(path):
-    cred_path = f"{path}/slsk_cred.json"
-    with open(cred_path, "r") as f:
+def cred_paths(cred_dir):
+    return cred_dir / "slsk_cred.json", cred_dir / "slsk.key"
+
+
+def cred_pair_exists(cred_dir):
+    cred_path, key_path = cred_paths(cred_dir)
+    return cred_path.is_file() and key_path.is_file()
+
+
+def load_cred(cred_dir):
+    cred_path, key_path = cred_paths(cred_dir)
+    with open(cred_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    key_path = f"{path}/slsk.key"
     with open(key_path, "rb") as f:
         key = f.read()
 
@@ -33,10 +44,83 @@ def load_cred(path):
     password = fernet.decrypt(data["password_encrypted"].encode()).decode()
     return username, password
 
+
+def save_cred(username, password, cred_dir=CREDENTIAL_DIR):
+    cred_dir.mkdir(parents=True, exist_ok=True)
+    cred_path, key_path = cred_paths(cred_dir)
+    key = Fernet.generate_key()
+    encrypted_password = Fernet(key).encrypt(password.encode()).decode()
+
+    with open(cred_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {"username": username, "password_encrypted": encrypted_password},
+            f,
+            indent=4,
+        )
+
+    with open(key_path, "wb") as f:
+        f.write(key)
+
+
+def migrate_cred_pair(source_dir, target_dir=CREDENTIAL_DIR):
+    target_dir.mkdir(parents=True, exist_ok=True)
+    source_cred_path, source_key_path = cred_paths(source_dir)
+    target_cred_path, target_key_path = cred_paths(target_dir)
+    shutil.copy2(source_cred_path, target_cred_path)
+    shutil.copy2(source_key_path, target_key_path)
+
+
+def prompt_for_credentials():
+    username = ""
+    while not username:
+        username = input("Soulseek username: ").strip()
+
+    password = ""
+    while not password:
+        password = getpass("Soulseek password: ").strip()
+
+    save_answer = input("Save encrypted credentials in user/ for next runs? (Y/n) ").strip().lower()
+    if save_answer in ("", "y", "yes"):
+        try:
+            save_cred(username, password)
+            print("Saved encrypted credentials to user/slsk_cred.json and user/slsk.key")
+        except Exception as e:
+            print(f"Could not save encrypted credentials: {e}")
+
+    return username, password, "interactive prompt"
+
+
+def resolve_credentials():
+    if SLSK_USER and SLSK_PW:
+        return SLSK_USER, SLSK_PW, "script settings"
+
+    env_user = os.environ.get("SLSK_USERNAME", "").strip()
+    env_pw = os.environ.get("SLSK_PASSWORD", "").strip()
+    if env_user and env_pw:
+        return env_user, env_pw, "environment variables"
+
+    candidate_dirs = [CREDENTIAL_DIR, *LEGACY_CREDENTIAL_DIRS]
+    for candidate_dir in candidate_dirs:
+        if not cred_pair_exists(candidate_dir):
+            continue
+
+        try:
+            username, password = load_cred(candidate_dir)
+            if candidate_dir != CREDENTIAL_DIR and not cred_pair_exists(CREDENTIAL_DIR):
+                migrate_cred_pair(candidate_dir, CREDENTIAL_DIR)
+                return username, password, f"{candidate_dir} (imported to user/)"
+            return username, password, f"{candidate_dir}"
+        except Exception as e:
+            print(f"Couldn't decrypt credentials from {candidate_dir}: {e}")
+
+    print("No usable saved Soulseek credentials found.")
+    return prompt_for_credentials()
+
 def is_queryfied(artist, title):
     return artist != "" and title != "" and "-" not in artist and '"' not in title
 
-def querify_tracklists(tracklist_dir, output_query_file):
+
+def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
     seen = set()
     queries = []
     skipped = []
@@ -97,25 +181,13 @@ def querify_tracklists(tracklist_dir, output_query_file):
 
     print(f"{len(queries)} filtered queries (list mode) ready at {output_query_file}")
 
+
 def sendseek():
     print("Seeking souls...")
 
     global SLSK_USER, SLSK_PW
-
-    if not SLSK_USER or not SLSK_PW:
-        print("Soulseek credentials missing. Attempting to load from file...")
-        try:
-            SLSK_USER, SLSK_PW = load_cred(SLSK_CRED)
-            print(f"Loaded credentials from {SLSK_USER}")
-        except Exception as e:
-            print(f"Error loading credentials: {e}")
-        if SLSK_USER == "":
-            SLSK_USER = input("Soulseek username: ")
-        if SLSK_PW == "":
-            SLSK_PW = input("Soulseek password: ")
-
-    else:
-        print(f"Accessing Soulseek as {SLSK_USER}")
+    SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
+    print(f"Accessing Soulseek as {SLSK_USER} ({cred_source})")
 
     env = os.environ.copy()
     env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
@@ -145,16 +217,16 @@ def sendseek():
     except subprocess.CalledProcessError as e:
         print(f"Seek collapsed under {e}")
 
-if __name__ == "__main__":
-    # Check venv
-    expected_venv = os.path.abspath("setseek_venv")
-    actual_venv = os.environ.get("VIRTUAL_ENV", "")
-    
-    if not actual_venv or not actual_venv.startswith(expected_venv):
-        print("(I told you they'd forget..): Please activate the virtual environment with 'source setseek_venv/bin/activate' before running this script.")
-        sys.exit(1)
 
-    print("Virtual environment good. Seeker spawned")
+if __name__ == "__main__":
+    # Friendly warning instead of hard-failing for users who run it directly.
+    expected_venv = os.path.abspath(".venv")
+    actual_venv = os.environ.get("VIRTUAL_ENV", "")
+
+    if not actual_venv or not actual_venv.startswith(expected_venv):
+        print("Warning: .venv is not active. If dependencies fail, run: source .venv/bin/activate")
+
+    print("Seeker spawned")
 
     # GO
     querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)

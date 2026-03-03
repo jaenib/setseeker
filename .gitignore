@@ -8,6 +8,7 @@ logs/
 sets/
 tracklists/
 setseek_venv/
+.venv/
 slsk-batchdl/
 spoils/
 tmp/
@@ -17,6 +18,7 @@ tmp/
 *.log
 *.sql
 *.sqlite
+__pycache__/
 
 # OS generated files #
 .DS_Store

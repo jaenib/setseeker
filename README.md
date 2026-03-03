@@ -26,9 +26,19 @@ What that script takes care of:
 - Checks for `ffmpeg`; will try to install it if the binary isn't found
 - Makes sure `.NET 6` is around, then clones and builds `slsk-batchdl` into `slsk-batchdl/slsk-batchdl/bin/Release`
 - Sets up the working folders: `sets`, `tracklists`, `spoils`, `user`, `logs`, `tmp/segments`, `tmp/queries`
-- Stores encrypted Soulseek credentials at `user/slsk_cred.json` + `user/slsk.key` (set `SLSK_USERNAME` and `SLSK_PASSWORD` in your shell to skip the prompt)
+- Uses one credential location: `user/slsk_cred.json` + `user/slsk.key`
+- If old credentials exist in `../user/`, offers to import them so you don't lose your previous setup
+- Supports non-interactive setup with `SLSK_USERNAME` and `SLSK_PASSWORD` if you prefer
 
 You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild `slsk-batchdl` if needed.
+
+## Soulseek Login Flow
+
+`seekspawner.py` resolves credentials in this order:
+
+1. `SLSK_USERNAME` + `SLSK_PASSWORD` environment variables
+2. Encrypted files in `user/`
+3. Interactive prompt (with option to save encrypted credentials for next run)
 
 ## Run it
 

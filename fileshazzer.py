@@ -100,7 +100,7 @@ if __name__ == "__main__":
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
     
     if not actual_venv or not actual_venv.startswith(expected_venv):
-        print("(I told you they'd forget..): Please activate the virtual environment with 'source setseek_venv/bin/activate' before running this script.")
+        print("(I told you they'd forget..): Please activate the virtual environment with 'source .venv/bin/activate' before running this script.")
         sys.exit(1)
 
     print("Virtual environment good. Locating set files...")

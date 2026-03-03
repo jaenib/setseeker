@@ -12,7 +12,7 @@ fi
 
 echo "Activating venv and installing Python dependencies..."
 source .venv/bin/activate
-echo "Acitvated venv, Python is:"
+echo "Activated venv, Python is:"
 which python
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -33,6 +33,25 @@ fi
 
 # 3. Setup default folders
 mkdir -p sets tracklists spoils user logs tmp/segments tmp/queries
+
+# Credential paths (single canonical location inside this repo)
+CRED_DIR="user"
+CRED_FILE="$CRED_DIR/slsk_cred.json"
+KEY_FILE="$CRED_DIR/slsk.key"
+LEGACY_CRED_FILE="../user/slsk_cred.json"
+LEGACY_KEY_FILE="../user/slsk.key"
+
+# Offer to import credentials from legacy sibling folders to avoid duplicate stores.
+if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] && [ -f "$LEGACY_KEY_FILE" ]; then
+    echo "Found encrypted Soulseek credentials in ../user (legacy location)."
+    read -p "Import those into this repo's user/ folder now? (Y/n) " import_answer
+    import_answer=${import_answer:-Y}
+    if [[ "$import_answer" =~ ^[Yy]$ ]]; then
+        cp "$LEGACY_CRED_FILE" "$CRED_FILE"
+        cp "$LEGACY_KEY_FILE" "$KEY_FILE"
+        echo "Imported credentials into $CRED_DIR/"
+    fi
+fi
 
 # 4. Install .NET 6 SDK if missing
 dotnet_missing=false
@@ -78,39 +97,44 @@ else
 fi
 
 # 5. Prompt to create Soulseek credentials file
-if [ ! -f "user/slsk_cred.json" ]; then
-    echo "Soulseek credentials are stored encrypted at user/slsk_cred.json"
-    echo "You can remove this file to reset them later."
-    if [[ -n "$SLSK_USERNAME" && -n "$SLSK_PASSWORD" ]]; then
-        python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "user"
-        echo "Credentials stored from environment variables."
-    else
-        echo "Enter Soulseek credentials now to store them (or skip to provide at runtime)."
-        read -p "Enter and store now? (Y/n) " answer
-        answer=${answer:-Y}  # default to 'Y' if empty
-
-        if [[ "$answer" =~ ^[Yy]$ ]]; then
-            read -p "Enter your Soulseek username: " username
-            read -s -p "Enter your Soulseek password: " password
-            echo ""
-            python3 crencrypt.py "$username" "$password" "user"
-        else
-            echo "You'll be prompted to enter credentials every time when running seekspawner."
-        fi
-    fi
-else
-    echo "Soulseek credentials exist, change then? (Y/n)"
-    read -p "Change credentials? (Y/n) " change_answer
-    change_answer=${change_answer:-N}  # default to 'N' if empty
+if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
+    echo "Encrypted Soulseek credentials already exist at $CRED_FILE"
+    read -p "Change credentials now? (y/N) " change_answer
+    change_answer=${change_answer:-N}
 
     if [[ "$change_answer" =~ ^[Yy]$ ]]; then
         read -p "Enter your Soulseek username: " username
         read -s -p "Enter your Soulseek password: " password
         echo ""
         source .venv/bin/activate
-        python3 crencrypt.py "$username" "$password" "user"
+        python3 crencrypt.py "$username" "$password" "$CRED_DIR"
     else
-        echo "Keeping existing credentials."
+        echo "Keeping existing encrypted credentials."
+    fi
+else
+    if [ -f "$CRED_FILE" ] || [ -f "$KEY_FILE" ]; then
+        echo "Found incomplete credential files in $CRED_DIR. They will be recreated."
+        rm -f "$CRED_FILE" "$KEY_FILE"
+    fi
+
+    echo "Soulseek credentials are stored encrypted at $CRED_FILE"
+    echo "Leave blank now if you'd rather enter credentials at runtime."
+
+    if [[ -n "$SLSK_USERNAME" && -n "$SLSK_PASSWORD" ]]; then
+        python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "$CRED_DIR"
+        echo "Credentials stored from environment variables."
+    else
+        read -p "Store credentials now? (Y/n) " answer
+        answer=${answer:-Y}  # default to 'Y' if empty
+
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            read -p "Enter your Soulseek username: " username
+            read -s -p "Enter your Soulseek password: " password
+            echo ""
+            python3 crencrypt.py "$username" "$password" "$CRED_DIR"
+        else
+            echo "Skipping storage. seekspawner.py will prompt at runtime."
+        fi
     fi
 fi
 
