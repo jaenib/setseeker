@@ -118,7 +118,7 @@ else
     fi
 
     echo "Soulseek credentials are stored encrypted at $CRED_FILE"
-    echo "Leave blank now if you'd rather enter credentials at runtime."
+    echo "Choose N if you'd rather enter credentials at runtime."
 
     if [[ -n "$SLSK_USERNAME" && -n "$SLSK_PASSWORD" ]]; then
         python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "$CRED_DIR"
