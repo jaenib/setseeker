@@ -1,11 +1,35 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "Setting up your Soulseek track downloader..."
 
-# 1. Create Python virtual environment
+# 1. Select Python and create virtual environment
+PYTHON_BIN=""
+for candidate in python3.11 python3.10 python3.9 python3; do
+    if command -v "$candidate" &> /dev/null; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "No python3 interpreter found. Install Python 3.11+ and rerun setup."
+    exit 1
+fi
+
+echo "Using $PYTHON_BIN for virtual environment creation."
+
+# Recreate incompatible old envs (for example python 3.8 envs from conda shim)
+if [ -x ".venv/bin/python" ]; then
+    if ! .venv/bin/python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"; then
+        echo "Existing .venv uses unsupported Python. Recreating .venv with $PYTHON_BIN..."
+        rm -rf .venv
+    fi
+fi
+
 if [ ! -d ".venv" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv .venv
+    "$PYTHON_BIN" -m venv .venv
 else
     echo "Python virtual environment already exists."
 fi
@@ -14,6 +38,8 @@ echo "Activating venv and installing Python dependencies..."
 source .venv/bin/activate
 echo "Activated venv, Python is:"
 which python
+python -c "import sys; print(sys.version)"
+python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
