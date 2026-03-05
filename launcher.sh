@@ -244,6 +244,14 @@ doctor_report() {
     fi
 }
 
+run_seekspawner() {
+    if [[ ${#SEEKSPAWNER_ARGS[@]} -gt 0 ]]; then
+        python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
+    else
+        python seekspawner.py
+    fi
+}
+
 ensure_python_environment
 
 export DOTNET_ROOT=/usr/local/share/dotnet
@@ -255,7 +263,7 @@ if [ "$MODE" = "doctor" ]; then
 fi
 
 if [ "$MODE" = "sharestats" ]; then
-    python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
+    run_seekspawner
     exit 0
 fi
 
@@ -273,5 +281,5 @@ if [ "$MODE" = "identify" ]; then
 fi
 
 echo "fileshazzer shazzed successfully. Moving on to seekspawner..."
-python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
+run_seekspawner
 echo -e "seekspawner \033[1mSUCCESS\033[0m. Enjoy the spoils"
