@@ -2,7 +2,6 @@ import sys
 import os
 import subprocess
 import asyncio
-import scdl
 
 try:
     from shazamio import Shazam
@@ -13,7 +12,6 @@ except ModuleNotFoundError:
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
-soundcloud_url = ""  # Example URL
 recognition_retries = 4
 recognition_retry_delay = 1.5
 recognition_request_spacing = 0.35
@@ -151,7 +149,8 @@ async def main(segment_length):
     sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
 
     if not sets:
-        print("No MP3 files found in 'sets' folder.\n")
+        print("No MP3 files found in 'sets/' folder.")
+        print("Use './launcher.sh <YouTube/SoundCloud URL or local file/folder path>' to ingest audio.")
         return
 
     for set_file in sets:
@@ -183,39 +182,9 @@ async def main(segment_length):
 
 # Run
 if __name__ == "__main__":
-    # Check venv
     expected_venv = os.path.abspath(".venv")
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
-    
     if not actual_venv or not actual_venv.startswith(expected_venv):
-        print("(I told you they'd forget..): Please activate the virtual environment with 'source .venv/bin/activate' before running this script.")
-        sys.exit(1)
+        print("Warning: .venv is not active. If dependencies fail, run: source .venv/bin/activate")
 
-    print("Virtual environment good. Locating set files...")
-
-    sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
-    
-    if not sets:
-        print("No MP3 files in 'sets/' folder.\n")
-        if soundcloud_url == "":
-            if not sys.stdin.isatty():
-                print("No interactive terminal detected.")
-                print("Add MP3 files to sets/ or set soundcloud_url in fileshazzer.py, then rerun.")
-                sys.exit(0)
-
-            answer = input(
-                "Paste a SoundCloud URL, type 'r' for a demo URL, or 'q' to quit: "
-            ).strip()
-            if answer.lower() == "r":
-                soundcloud_url = "https://soundcloud.com/accceler/strobilate-16082020"
-            elif answer.lower() == "q":
-                print("Exiting without changes.")
-                sys.exit(0)
-            elif answer:
-                soundcloud_url = answer
-            else:
-                print("No URL provided. Exiting without changes.")
-                sys.exit(0)
-
-        scdl.main(soundcloud_url)
     asyncio.run(main(segment_length))

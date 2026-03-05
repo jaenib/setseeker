@@ -42,15 +42,29 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
 
 ## Run it
 
-1. Drop MP3s into `sets/` or point `fileshazzer.py` at a SoundCloud link (the `soundcloud_url` variable near the top).
-2. Run the launcher directly (no manual venv activation needed):
+1. Run the launcher directly (no manual venv activation needed):
 
    ```
    chmod +x launcher.sh
-   ./launcher.sh
+   ./launcher.sh "<source>"
    ```
 
-   `launcher.sh` auto-checks/fixes `.venv`, validates required tools, then runs `fileshazzer.py` followed by `seekspawner.py`.
+   `source` can be:
+   - a YouTube URL (video or playlist)
+   - a SoundCloud URL (track or playlist)
+   - a local audio file path (mp3/wav/flac/...)
+   - a local folder path with audio files
+
+   `launcher.sh` auto-checks/fixes `.venv`, ingests/downloads audio into `sets/`, then runs `fileshazzer.py` followed by `seekspawner.py`.
+
+2. Local file fallback is still supported:
+
+   - put MP3 files directly in `sets/`
+   - then run:
+
+   ```
+   ./launcher.sh
+   ```
 
 3. Optional helper modes:
 
@@ -63,11 +77,12 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
    - **Just fingerprint and build tracklists (no Soulseek download step)**
 
      ```
-     ./launcher.sh --identify-only
+     ./launcher.sh --identify-only "<source>"
      ```
 
-4. Advanced/manual mode:
+4. Advanced/manual mode (if you want to run scripts yourself):
 
+   - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
    - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
    - `python3.11 seekspawner.py` for only the Soulseek download stage
 

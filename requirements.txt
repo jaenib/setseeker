@@ -4,3 +4,4 @@ shazamio==0.4.0.1
 cryptography
 soundcloud-lib
 ffmpeg
+yt-dlp
