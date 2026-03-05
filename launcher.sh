@@ -7,6 +7,7 @@ cd "$SCRIPT_DIR"
 MODE="full"
 SOURCE=""
 FILESHAZZER_ARGS=()
+SEEKSPAWNER_ARGS=()
 
 print_help() {
     cat <<'EOF'
@@ -22,6 +23,12 @@ source:
 options:
   --doctor, --check          Validate environment and print diagnostics
   --identify-only            Ingest + Shazam tracklist only (skip Soulseek download)
+  --share-dir <path>         Set local share folder for seekspawner (default: spoils)
+  --no-share-dir             Opt out of local share folder
+  --skip-share-check         Skip sharing reminder for this run
+  --disable-share-reminder   Persistently mute "no-share-folder" reminder
+  --enable-share-reminder    Re-enable "no-share-folder" reminder
+  --show-share-stats         Print stored sharing/download stats and exit
   --source, -s <source>      Explicit source (equivalent to positional source)
   -h, --help                 Show this help
 EOF
@@ -35,6 +42,35 @@ while [[ $# -gt 0 ]]; do
             ;;
         --identify-only|--shazam-only)
             MODE="identify"
+            shift
+            ;;
+        --share-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for $1"
+                exit 1
+            fi
+            SEEKSPAWNER_ARGS+=("--share-dir" "$2")
+            shift 2
+            ;;
+        --skip-share-check)
+            SEEKSPAWNER_ARGS+=("--skip-share-check")
+            shift
+            ;;
+        --no-share-dir)
+            SEEKSPAWNER_ARGS+=("--no-share-dir")
+            shift
+            ;;
+        --disable-share-reminder)
+            SEEKSPAWNER_ARGS+=("--disable-share-reminder")
+            shift
+            ;;
+        --enable-share-reminder)
+            SEEKSPAWNER_ARGS+=("--enable-share-reminder")
+            shift
+            ;;
+        --show-share-stats)
+            SEEKSPAWNER_ARGS+=("--show-share-stats")
+            MODE="sharestats"
             shift
             ;;
         --source|-s)
@@ -218,6 +254,11 @@ if [ "$MODE" = "doctor" ]; then
     exit 0
 fi
 
+if [ "$MODE" = "sharestats" ]; then
+    python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
+    exit 0
+fi
+
 check_runtime_tools_for_mode
 ingest_source_if_provided
 
@@ -232,5 +273,5 @@ if [ "$MODE" = "identify" ]; then
 fi
 
 echo "fileshazzer shazzed successfully. Moving on to seekspawner..."
-python seekspawner.py
+python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
 echo -e "seekspawner \033[1mSUCCESS\033[0m. Enjoy the spoils"

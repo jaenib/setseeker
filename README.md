@@ -32,6 +32,19 @@ What that script takes care of:
 
 You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild `slsk-batchdl` if needed.
 
+## Community Sharing Flow (setseeker-owned)
+
+The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not by patching upstream `slsk-batchdl`.
+
+- Default local share folder is the download folder: `spoils/`
+- Change local share folder with `--share-dir <path>`
+- Opt out of local share folder with `--no-share-dir`
+- If no local share folder is configured, a reminder is shown at run start
+- If you already broadcast elsewhere, mute that reminder with `--disable-share-reminder`
+- `--skip-share-check` bypasses reminder for one run
+- Session and cumulative share-vs-download stats are tracked
+- Local state lives at `user/community_state.json`
+
 ## Soulseek Login Flow
 
 `seekspawner.py` resolves credentials in this order:
@@ -80,11 +93,43 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
      ./launcher.sh --identify-only "<source>"
      ```
 
+   - **Set or override the community share folder**
+
+     ```
+     ./launcher.sh --share-dir "/path/to/your/shared-music"
+     ```
+
+   - **Opt out of local share folder**
+
+     ```
+     ./launcher.sh --no-share-dir
+     ```
+
+   - **Skip share reminder for one run**
+
+     ```
+     ./launcher.sh --skip-share-check
+     ```
+
+   - **Mute reminder if you already share elsewhere**
+
+     ```
+     ./launcher.sh --disable-share-reminder
+     ```
+
+   - **Show cumulative share/download stats**
+
+     ```
+     ./launcher.sh --show-share-stats
+     ```
+
 4. Advanced/manual mode (if you want to run scripts yourself):
 
    - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
    - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
    - `python3.11 seekspawner.py` for only the Soulseek download stage
+   - `python3.11 seekspawner.py --help-share` for wrapper sharing help
+   - `python3.11 seekspawner.py --show-share-stats` for stored stats only
 
 `seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
 

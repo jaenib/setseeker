@@ -1,10 +1,12 @@
-import os
-import json
-import subprocess
+import argparse
 import glob
+import json
+import os
 import re
 import shutil
+import subprocess
 import sys
+import time
 from getpass import getpass
 from pathlib import Path
 
@@ -25,9 +27,30 @@ SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
 CREDENTIAL_DIR = Path("user")
 LEGACY_CREDENTIAL_DIRS = [Path("../user")]
 
+COMMUNITY_STATE_PATH = CREDENTIAL_DIR / "community_state.json"
+DEFAULT_SHARE_DIR = "spoils"
+
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".ogg", ".m4a", ".opus", ".wav", ".aac", ".alac"}
+
 SLSK_USER = ""  # Fill in manually to skip loading
 SLSK_PW = ""  # Fill in manually to skip loading
 # --------------------------------------------------
+
+
+def default_community_state():
+    return {
+        "share_dir": DEFAULT_SHARE_DIR,  # Default behavior: downloaded files live in shared folder.
+        "suppress_no_share_reminder": False,
+        "stats": {
+            "runs": 0,
+            "downloaded_tracks_total": 0,
+            "downloaded_bytes_total": 0,
+            "shared_files_last": 0,
+            "shared_bytes_last": 0,
+            "shared_files_peak": 0,
+            "shared_bytes_peak": 0,
+        },
+    }
 
 
 def cred_paths(cred_dir):
@@ -123,6 +146,242 @@ def resolve_credentials():
     print("No usable saved Soulseek credentials found.")
     return prompt_for_credentials()
 
+
+def load_community_state():
+    state = default_community_state()
+
+    if not COMMUNITY_STATE_PATH.is_file():
+        return state
+
+    try:
+        with open(COMMUNITY_STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            share_dir = data.get("share_dir", DEFAULT_SHARE_DIR)
+            normalized = resolve_share_dir(share_dir)
+            state["share_dir"] = "" if normalized is None else str(normalized)
+            if not state["share_dir"] and "share_dir" not in data:
+                state["share_dir"] = DEFAULT_SHARE_DIR
+
+            state["suppress_no_share_reminder"] = bool(
+                data.get("suppress_no_share_reminder", False)
+            )
+
+            stats = data.get("stats", {})
+            if isinstance(stats, dict):
+                default_stats = state["stats"]
+                for key in default_stats.keys():
+                    try:
+                        default_stats[key] = int(stats.get(key, default_stats[key]))
+                    except (TypeError, ValueError):
+                        pass
+    except Exception as e:
+        print(f"Could not read {COMMUNITY_STATE_PATH}: {e}")
+
+    return state
+
+
+def save_community_state(state):
+    CREDENTIAL_DIR.mkdir(parents=True, exist_ok=True)
+    default_state = default_community_state()
+    raw_share_dir = state.get("share_dir", default_state["share_dir"])
+    normalized_share_dir = ""
+    if raw_share_dir is not None:
+        normalized_share_dir = str(raw_share_dir).strip()
+        if normalized_share_dir.lower() in {"none", "off", "disable", "disabled"}:
+            normalized_share_dir = ""
+
+    payload = {
+        "share_dir": normalized_share_dir,
+        "suppress_no_share_reminder": bool(
+            state.get(
+                "suppress_no_share_reminder",
+                default_state["suppress_no_share_reminder"],
+            )
+        ),
+        "stats": {},
+    }
+
+    stats = state.get("stats", {})
+    if not isinstance(stats, dict):
+        stats = {}
+
+    for key, value in default_state["stats"].items():
+        try:
+            payload["stats"][key] = int(stats.get(key, value))
+        except (TypeError, ValueError):
+            payload["stats"][key] = value
+
+    with open(COMMUNITY_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def resolve_share_dir(raw_path):
+    if raw_path is None:
+        return None
+
+    path_str = str(raw_path).strip()
+    if path_str.lower() in {"", "none", "off", "disable", "disabled"}:
+        return None
+
+    expanded = os.path.expandvars(os.path.expanduser(path_str))
+    return Path(expanded)
+
+
+def count_files_and_size(folder, audio_only=False):
+    if not folder.exists() or not folder.is_dir():
+        return 0, 0
+
+    count = 0
+    size_bytes = 0
+
+    for item in folder.rglob("*"):
+        if not item.is_file():
+            continue
+        if audio_only and item.suffix.lower() not in AUDIO_EXTENSIONS:
+            continue
+        count += 1
+        try:
+            size_bytes += item.stat().st_size
+        except OSError:
+            pass
+
+    return count, size_bytes
+
+
+def format_megabytes(size_bytes):
+    return f"{size_bytes / (1024.0 * 1024.0):.1f}"
+
+
+def format_gigabytes(size_bytes):
+    return f"{size_bytes / (1024.0 * 1024.0 * 1024.0):.2f}"
+
+
+def maybe_print_no_share_reminder(state, share_dir, skip_share_check=False):
+    if share_dir is not None:
+        return
+    if skip_share_check:
+        print("Skipping sharing reminder for this run (--skip-share-check).")
+        return
+    if state.get("suppress_no_share_reminder", False):
+        return
+
+    print("\nCommunity reminder: sharing is cool and keeps Soulseek healthy.")
+    print("No local share folder is configured for setseeker right now.")
+    print("Set one with: --share-dir <path>")
+    print("If you already share elsewhere (Nicotine+/slskd), silence this with: --disable-share-reminder")
+    for seconds in range(10, 0, -1):
+        print(f"Continuing in {seconds}s... (or rerun with --skip-share-check)")
+        time.sleep(1)
+
+
+def update_and_save_stats(state, downloaded_tracks, downloaded_bytes, shared_files, shared_bytes):
+    stats = state.setdefault("stats", {})
+
+    stats["runs"] = int(stats.get("runs", 0)) + 1
+    stats["downloaded_tracks_total"] = int(stats.get("downloaded_tracks_total", 0)) + int(downloaded_tracks)
+    stats["downloaded_bytes_total"] = int(stats.get("downloaded_bytes_total", 0)) + int(downloaded_bytes)
+
+    stats["shared_files_last"] = int(shared_files)
+    stats["shared_bytes_last"] = int(shared_bytes)
+    stats["shared_files_peak"] = max(int(stats.get("shared_files_peak", 0)), int(shared_files))
+    stats["shared_bytes_peak"] = max(int(stats.get("shared_bytes_peak", 0)), int(shared_bytes))
+
+    save_community_state(state)
+
+
+def print_stats_snapshot(state):
+    stats = state.get("stats", {})
+    runs = int(stats.get("runs", 0))
+    d_tracks = int(stats.get("downloaded_tracks_total", 0))
+    d_bytes = int(stats.get("downloaded_bytes_total", 0))
+    s_files_last = int(stats.get("shared_files_last", 0))
+    s_bytes_last = int(stats.get("shared_bytes_last", 0))
+    s_files_peak = int(stats.get("shared_files_peak", 0))
+    s_bytes_peak = int(stats.get("shared_bytes_peak", 0))
+
+    print(
+        f"Stats: {runs} runs, downloaded {d_tracks} tracks "
+        f"({format_gigabytes(d_bytes)} GB total)."
+    )
+    print(
+        f"Last configured share snapshot: {s_files_last} files "
+        f"({format_gigabytes(s_bytes_last)} GB)."
+    )
+    print(
+        f"Peak configured share snapshot: {s_files_peak} files "
+        f"({format_gigabytes(s_bytes_peak)} GB)."
+    )
+    if d_bytes > 0:
+        ratio = s_bytes_last / d_bytes
+        print(f"Current share-vs-downloaded bytes ratio: {ratio:.2f}x.")
+
+
+def print_session_summary(state, spoils_before, spoils_after, share_dir):
+    before_tracks, before_bytes = spoils_before
+    after_tracks, after_bytes = spoils_after
+
+    downloaded_tracks = max(after_tracks - before_tracks, 0)
+    downloaded_bytes = max(after_bytes - before_bytes, 0)
+    shared_files, shared_bytes = (
+        count_files_and_size(share_dir, audio_only=False) if share_dir is not None else (0, 0)
+    )
+
+    update_and_save_stats(state, downloaded_tracks, downloaded_bytes, shared_files, shared_bytes)
+    stats = state.get("stats", {})
+    downloaded_bytes_total = int(stats.get("downloaded_bytes_total", 0))
+
+    if share_dir is not None:
+        summary = (
+            f"Downloaded {downloaded_tracks} tracks ({format_megabytes(downloaded_bytes)} MB). "
+            f"Configured share folder has {shared_files} files ({format_gigabytes(shared_bytes)} GB)."
+        )
+    else:
+        summary = (
+            f"Downloaded {downloaded_tracks} tracks ({format_megabytes(downloaded_bytes)} MB). "
+            "No local share folder configured."
+        )
+
+    if downloaded_bytes_total > 0:
+        ratio = shared_bytes / downloaded_bytes_total
+        summary += f" Share/download ratio (current-vs-total bytes): {ratio:.2f}x."
+
+    print(summary)
+    print_stats_snapshot(state)
+
+
+def print_share_help():
+    print(
+        "Sharing & community (setseeker wrapper)\n"
+        "- This flow lives in seekspawner.py, without modifying slsk-batchdl.\n"
+        "- Default share folder is 'spoils' (the download folder).\n"
+        "- Change it with --share-dir <path>, or disable local sharing with --no-share-dir.\n"
+        "- If no share folder is configured, a reminder is shown at run start.\n"
+        "- If you already share elsewhere, persistently silence that reminder with --disable-share-reminder.\n"
+        "- Use --skip-share-check for a one-run bypass."
+    )
+
+
+def apply_community_arg_overrides(state, args):
+    changed = False
+
+    if args.share_dir is not None:
+        normalized = resolve_share_dir(args.share_dir)
+        state["share_dir"] = str(normalized) if normalized is not None else ""
+        changed = True
+    if args.no_share_dir:
+        state["share_dir"] = ""
+        changed = True
+    if args.disable_share_reminder:
+        state["suppress_no_share_reminder"] = True
+        changed = True
+    if args.enable_share_reminder:
+        state["suppress_no_share_reminder"] = False
+        changed = True
+
+    return changed
+
+
 def is_queryfied(artist, title):
     return artist != "" and title != "" and "-" not in artist and '"' not in title
 
@@ -134,30 +393,30 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
 
     txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
     print(f"Found {len(txt_files)} .txt files in '{tracklist_dir}'")
-    
+
     for file_path in txt_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         for lineno, line in enumerate(lines, 1):
             original = line.strip()
-            cleaned = re.sub(r'^\[\d{2}:\d{2}:\d{2}\]\s*', '', original)
+            cleaned = re.sub(r"^\[\d{2}:\d{2}:\d{2}\]\s*", "", original)
 
             if not cleaned or cleaned.lower().startswith("final tracklist"):
                 skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")
                 continue
-    
-            if '-' in cleaned:
-                parts = cleaned.split('-', maxsplit=1)
-    
+
+            if "-" in cleaned:
+                parts = cleaned.split("-", maxsplit=1)
+
                 if len(parts) < 2:
                     skipped.append(f"[{file_path}:{lineno}] TOO FEW PARTS -> {cleaned}")
                     continue
-    
+
                 artist = parts[0].strip()
                 title = parts[1].strip()
-                title = re.sub(r'\s+(320|FLAC)$', '', title, flags=re.IGNORECASE)
-    
+                title = re.sub(r"\s+(320|FLAC)$", "", title, flags=re.IGNORECASE)
+
                 if not is_queryfied(artist, title):
                     skipped.append(f"[{file_path}:{lineno}] BAD FORMAT -> {cleaned}")
                     continue
@@ -170,7 +429,7 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
                         if format_type == "mp3":
                             query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
                             queries.append(query_line)
-                            
+
                         if format_type == "flac":
                             query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
                             queries.append(query_line)
@@ -178,19 +437,25 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
             else:
                 skipped.append(f"[{file_path}:{lineno}] NO HYPHEN or EMPTY -> {cleaned}")
 
-    with open(output_query_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(queries))
+    with open(output_query_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(queries))
 
     if skipped:
-        with open(SKIPPED_PATH, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(skipped))
+        with open(SKIPPED_PATH, "w", encoding="utf-8") as f:
+            f.write("\n".join(skipped))
         print(f"Skipped {len(skipped)} problematic lines. See {SKIPPED_PATH} for details.")
 
     print(f"{len(queries)} filtered queries (list mode) ready at {output_query_file}")
 
 
-def sendseek():
+def sendseek(args, state):
     print("Seeking souls...")
+
+    share_dir = resolve_share_dir(state.get("share_dir", DEFAULT_SHARE_DIR))
+    if share_dir is not None:
+        print(f"Community share folder: {share_dir}")
+
+    maybe_print_no_share_reminder(state, share_dir, skip_share_check=args.skip_share_check)
 
     global SLSK_USER, SLSK_PW
     SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
@@ -200,33 +465,86 @@ def sendseek():
     env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
     env["PATH"] = f'{env["DOTNET_ROOT"]}:{env["PATH"]}'
 
-    '''
-    command = ["dotnet", "--list-sdks",
-               "DOTNET_ROOT=usr/local/share/dotnet",
-               "PATH=$DOTNET_ROOT:$PATH",
-               "dotnet", "--list-sdks"]
-    '''
-    #subprocess.run(command, env=env, check=True)
-
     command = [
         "dotnet",
         SLSKDL_EXECUTABLE,
         QUERYFILE_PATH,
-        "--user", SLSK_USER,
-        "--pass", SLSK_PW,
+        "--user",
+        SLSK_USER,
+        "--pass",
+        SLSK_PW,
         "--input-type=list",
-        "--path", "spoils",
+        "--path",
+        "spoils",
     ]
 
+    spoils_before = count_files_and_size(Path("spoils"), audio_only=True)
     try:
         subprocess.run(command, env=env, check=True)
         print("Seek concluded")
     except subprocess.CalledProcessError as e:
         print(f"Seek collapsed under {e}")
+    finally:
+        spoils_after = count_files_and_size(Path("spoils"), audio_only=True)
+        print_session_summary(state, spoils_before, spoils_after, share_dir)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Convert tracklists into sldl queries and download from Soulseek.",
+    )
+    parser.add_argument(
+        "--share-dir",
+        help="Set local share folder (default: spoils). Set to 'none' to disable local share folder.",
+    )
+    parser.add_argument(
+        "--no-share-dir",
+        action="store_true",
+        help="Disable local share folder (opt out).",
+    )
+    parser.add_argument(
+        "--skip-share-check",
+        action="store_true",
+        help="Skip sharing reminder for this run only.",
+    )
+    parser.add_argument(
+        "--disable-share-reminder",
+        action="store_true",
+        help="Persistently silence reminder when no local share folder is configured.",
+    )
+    parser.add_argument(
+        "--enable-share-reminder",
+        action="store_true",
+        help="Re-enable reminder when no local share folder is configured.",
+    )
+    parser.add_argument(
+        "--show-share-stats",
+        action="store_true",
+        help="Print stored share/download stats and exit.",
+    )
+    parser.add_argument(
+        "--help-share",
+        action="store_true",
+        help="Print community sharing help and exit.",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    # Friendly warning instead of hard-failing for users who run it directly.
+    args = parse_args()
+
+    if args.help_share:
+        print_share_help()
+        sys.exit(0)
+
+    community_state = load_community_state()
+    if apply_community_arg_overrides(community_state, args):
+        save_community_state(community_state)
+
+    if args.show_share_stats:
+        print_stats_snapshot(community_state)
+        sys.exit(0)
+
     expected_venv = os.path.abspath(".venv")
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
 
@@ -235,6 +553,5 @@ if __name__ == "__main__":
 
     print("Seeker spawned")
 
-    # GO
     querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)
-    sendseek()
+    sendseek(args, community_state)
