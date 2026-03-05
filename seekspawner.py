@@ -22,6 +22,7 @@ except ModuleNotFoundError:
 TRACKLIST_DIR = "tracklists"
 QUERYFILE_PATH = "tmp/queries/queries.txt"
 SKIPPED_PATH = "logs/skipped_queries.log"
+TRACKLIST_MANIFEST_PATH = Path("tmp/queries/tracklists_last_run.txt")
 
 SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
 CREDENTIAL_DIR = Path("user")
@@ -386,13 +387,35 @@ def is_queryfied(artist, title):
     return artist != "" and title != "" and "-" not in artist and '"' not in title
 
 
-def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
+def list_tracklist_files(tracklist_dir, use_last_run_only=True):
+    if use_last_run_only and TRACKLIST_MANIFEST_PATH.is_file():
+        manifest_paths = []
+        with open(TRACKLIST_MANIFEST_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                candidate = line.strip()
+                if not candidate:
+                    continue
+                candidate_path = Path(candidate)
+                if candidate_path.is_file():
+                    manifest_paths.append(str(candidate_path))
+        if manifest_paths:
+            print(
+                f"Using {len(manifest_paths)} tracklist file(s) from latest fileshazzer run "
+                f"({TRACKLIST_MANIFEST_PATH})."
+            )
+            return manifest_paths
+
+    txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
+    print(f"Using all tracklists: found {len(txt_files)} .txt file(s) in '{tracklist_dir}'")
+    return txt_files
+
+
+def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH, use_last_run_only=True):
     seen = set()
     queries = []
     skipped = []
 
-    txt_files = glob.glob(os.path.join(tracklist_dir, "**", "*.txt"), recursive=True)
-    print(f"Found {len(txt_files)} .txt files in '{tracklist_dir}'")
+    txt_files = list_tracklist_files(tracklist_dir, use_last_run_only=use_last_run_only)
 
     for file_path in txt_files:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -446,6 +469,10 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH):
         print(f"Skipped {len(skipped)} problematic lines. See {SKIPPED_PATH} for details.")
 
     print(f"{len(queries)} filtered queries (list mode) ready at {output_query_file}")
+    if not use_last_run_only:
+        print("Note: --all-tracklists includes historical sets; 'already exist' messages are expected.")
+    else:
+        print("Only latest-run tracklists were queried to reduce duplicate re-checks.")
 
 
 def sendseek(args, state):
@@ -527,6 +554,11 @@ def parse_args():
         action="store_true",
         help="Print community sharing help and exit.",
     )
+    parser.add_argument(
+        "--all-tracklists",
+        action="store_true",
+        help="Query every tracklist under tracklists/ (legacy behavior).",
+    )
     return parser.parse_args()
 
 
@@ -553,5 +585,9 @@ if __name__ == "__main__":
 
     print("Seeker spawned")
 
-    querify_tracklists(TRACKLIST_DIR, QUERYFILE_PATH)
+    querify_tracklists(
+        TRACKLIST_DIR,
+        QUERYFILE_PATH,
+        use_last_run_only=not args.all_tracklists,
+    )
     sendseek(args, community_state)

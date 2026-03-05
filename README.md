@@ -123,6 +123,12 @@ The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not b
      ./launcher.sh --show-share-stats
      ```
 
+   - **Re-run against all historical tracklists (legacy behavior)**
+
+     ```
+     ./launcher.sh --all-tracklists
+     ```
+
 4. Advanced/manual mode (if you want to run scripts yourself):
 
    - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
@@ -130,8 +136,15 @@ The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not b
    - `python3.11 seekspawner.py` for only the Soulseek download stage
    - `python3.11 seekspawner.py --help-share` for wrapper sharing help
    - `python3.11 seekspawner.py --show-share-stats` for stored stats only
+   - `python3.11 seekspawner.py --all-tracklists` to include all historical tracklists (legacy behavior)
 
 `seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
+
+### Why you might see "already exist"
+
+`sldl` checks your output folder to avoid duplicate downloads.  
+Setseeker now queries only tracklists from the **latest `fileshazzer` run** by default to reduce noisy re-checks across old sets.
+If you explicitly choose `--all-tracklists`, expect more `already exist` lines.
 
 ## Example tracklist output
 

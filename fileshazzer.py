@@ -2,6 +2,7 @@ import sys
 import os
 import subprocess
 import asyncio
+from pathlib import Path
 
 try:
     from shazamio import Shazam
@@ -20,10 +21,18 @@ recognition_request_spacing = 0.35
 INPUT_DIR = "sets"  # MP3 files
 SEGMENTS_DIR = "tmp/segments"
 OUT_DIR = "tracklists"
+RUN_TRACKLIST_MANIFEST = Path("tmp/queries/tracklists_last_run.txt")
 
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
+RUN_TRACKLIST_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+
+
+def write_last_run_manifest(tracklist_paths):
+    with open(RUN_TRACKLIST_MANIFEST, "w", encoding="utf-8") as f:
+        for tracklist_path in tracklist_paths:
+            f.write(str(tracklist_path) + "\n")
 
 async def recognize_segment(shazam, file_path):
     # Support both recent and older shazamio APIs.
@@ -147,10 +156,12 @@ async def recognize_tracks(segment_length):
 # ID all sets in "sets"
 async def main(segment_length):
     sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
+    generated_tracklists = []
 
     if not sets:
         print("No MP3 files found in 'sets/' folder.")
         print("Use './launcher.sh <YouTube/SoundCloud URL or local file/folder path>' to ingest audio.")
+        write_last_run_manifest([])
         return
 
     for set_file in sets:
@@ -172,9 +183,12 @@ async def main(segment_length):
             f.write("Final Tracklist:\n")
             for track in tracks:
                 f.write(track + "\n")
+        generated_tracklists.append(Path(output_file))
 
         # Move set to outdir
         os.rename(os.path.join(INPUT_DIR, set_file), os.path.join(output_dir, set_file))
+
+    write_last_run_manifest(generated_tracklists)
 
     print("\nFinal Tracklist:")
     for track in tracks:

@@ -29,6 +29,7 @@ options:
   --disable-share-reminder   Persistently mute "no-share-folder" reminder
   --enable-share-reminder    Re-enable "no-share-folder" reminder
   --show-share-stats         Print stored sharing/download stats and exit
+  --all-tracklists           Query all historical tracklists (legacy behavior)
   --source, -s <source>      Explicit source (equivalent to positional source)
   -h, --help                 Show this help
 EOF
@@ -71,6 +72,10 @@ while [[ $# -gt 0 ]]; do
         --show-share-stats)
             SEEKSPAWNER_ARGS+=("--show-share-stats")
             MODE="sharestats"
+            shift
+            ;;
+        --all-tracklists)
+            SEEKSPAWNER_ARGS+=("--all-tracklists")
             shift
             ;;
         --source|-s)
