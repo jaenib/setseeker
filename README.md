@@ -32,19 +32,13 @@ What that script takes care of:
 
 You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild `slsk-batchdl` if needed.
 
-## Community Sharing Flow (setseeker-owned)
+## Soulseek Etiquette Reminder
 
-The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not by patching upstream `slsk-batchdl`.
+`seekspawner.py` now prints a reminder at every start:
 
-- `setseeker` does **not** broadcast/share files on Soulseek by itself
-- Default local share folder is the download folder: `spoils/`
-- Change local share folder with `--share-dir <path>`
-- Opt out of local share folder with `--no-share-dir`
-- If no local share folder is configured, a one-time reminder is shown at run start
-- If you already broadcast elsewhere, mute that reminder with `--disable-share-reminder`
-- `--skip-share-reminder` bypasses reminder for one run
-- Session and cumulative share-vs-download stats are tracked
-- Local state lives at `user/community_state.json`
+- `setseeker` downloads from Soulseek, but does not share files by itself
+- New users should install a sharing client (Nicotine+ or slskd)
+- Keep shared folders online regularly and respect uploaders/queues
 
 ## Soulseek Login Flow
 
@@ -94,36 +88,6 @@ The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not b
      ./launcher.sh --identify-only "<source>"
      ```
 
-   - **Set or override the community share folder**
-
-     ```
-     ./launcher.sh --share-dir "/path/to/your/shared-music"
-     ```
-
-   - **Opt out of local share folder**
-
-     ```
-     ./launcher.sh --no-share-dir
-     ```
-
-   - **Skip share reminder for one run**
-
-     ```
-     ./launcher.sh --skip-share-reminder
-     ```
-
-   - **Mute reminder if you already share elsewhere**
-
-     ```
-     ./launcher.sh --disable-share-reminder
-     ```
-
-   - **Show cumulative share/download stats**
-
-     ```
-     ./launcher.sh --show-share-stats
-     ```
-
    - **Re-run against all historical tracklists (legacy behavior)**
 
      ```
@@ -135,8 +99,6 @@ The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not b
    - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
    - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
    - `python3.11 seekspawner.py` for only the Soulseek download stage
-   - `python3.11 seekspawner.py --help-share` for wrapper sharing help
-   - `python3.11 seekspawner.py --show-share-stats` for stored stats only
    - `python3.11 seekspawner.py --all-tracklists` to include all historical tracklists (legacy behavior)
 
 `seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
