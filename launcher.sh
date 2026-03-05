@@ -25,7 +25,7 @@ options:
   --identify-only            Ingest + Shazam tracklist only (skip Soulseek download)
   --share-dir <path>         Set local share folder for seekspawner (default: spoils)
   --no-share-dir             Opt out of local share folder
-  --skip-share-check         Skip sharing reminder for this run
+  --skip-share-reminder      Skip sharing reminder for this run
   --disable-share-reminder   Persistently mute "no-share-folder" reminder
   --enable-share-reminder    Re-enable "no-share-folder" reminder
   --show-share-stats         Print stored sharing/download stats and exit
@@ -53,8 +53,8 @@ while [[ $# -gt 0 ]]; do
             SEEKSPAWNER_ARGS+=("--share-dir" "$2")
             shift 2
             ;;
-        --skip-share-check)
-            SEEKSPAWNER_ARGS+=("--skip-share-check")
+        --skip-share-reminder|--skip-share-check)
+            SEEKSPAWNER_ARGS+=("--skip-share-reminder")
             shift
             ;;
         --no-share-dir)

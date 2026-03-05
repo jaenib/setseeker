@@ -42,6 +42,7 @@ def default_community_state():
     return {
         "share_dir": DEFAULT_SHARE_DIR,  # Default behavior: downloaded files live in shared folder.
         "suppress_no_share_reminder": False,
+        "no_share_notice_seen": False,
         "stats": {
             "runs": 0,
             "downloaded_tracks_total": 0,
@@ -167,6 +168,7 @@ def load_community_state():
             state["suppress_no_share_reminder"] = bool(
                 data.get("suppress_no_share_reminder", False)
             )
+            state["no_share_notice_seen"] = bool(data.get("no_share_notice_seen", False))
 
             stats = data.get("stats", {})
             if isinstance(stats, dict):
@@ -198,6 +200,12 @@ def save_community_state(state):
             state.get(
                 "suppress_no_share_reminder",
                 default_state["suppress_no_share_reminder"],
+            )
+        ),
+        "no_share_notice_seen": bool(
+            state.get(
+                "no_share_notice_seen",
+                default_state["no_share_notice_seen"],
             )
         ),
         "stats": {},
@@ -258,22 +266,26 @@ def format_gigabytes(size_bytes):
     return f"{size_bytes / (1024.0 * 1024.0 * 1024.0):.2f}"
 
 
-def maybe_print_no_share_reminder(state, share_dir, skip_share_check=False):
+def maybe_print_no_share_reminder(state, share_dir, skip_share_reminder=False):
     if share_dir is not None:
         return
-    if skip_share_check:
-        print("Skipping sharing reminder for this run (--skip-share-check).")
+    if skip_share_reminder:
+        print("Skipping sharing reminder for this run (--skip-share-reminder).")
         return
     if state.get("suppress_no_share_reminder", False):
         return
+    if state.get("no_share_notice_seen", False):
+        return
 
-    print("\nCommunity reminder: sharing is cool and keeps Soulseek healthy.")
-    print("No local share folder is configured for setseeker right now.")
-    print("Set one with: --share-dir <path>")
-    print("If you already share elsewhere (Nicotine+/slskd), silence this with: --disable-share-reminder")
+    print("\nCommunity reminder: setseeker cannot verify whether your account shares on Soulseek.")
+    print("No local share folder is configured in setseeker right now.")
+    print("To share from this setup, configure one with: --share-dir <path>")
+    print("If you already share elsewhere (Nicotine+/slskd), silence this reminder with: --disable-share-reminder")
     for seconds in range(10, 0, -1):
-        print(f"Continuing in {seconds}s... (or rerun with --skip-share-check)")
+        print(f"Continuing in {seconds}s... (or rerun with --skip-share-reminder)")
         time.sleep(1)
+    state["no_share_notice_seen"] = True
+    save_community_state(state)
 
 
 def update_and_save_stats(state, downloaded_tracks, downloaded_bytes, shared_files, shared_bytes):
@@ -335,7 +347,7 @@ def print_session_summary(state, spoils_before, spoils_after, share_dir):
     if share_dir is not None:
         summary = (
             f"Downloaded {downloaded_tracks} tracks ({format_megabytes(downloaded_bytes)} MB). "
-            f"Configured share folder has {shared_files} files ({format_gigabytes(shared_bytes)} GB)."
+            f"Configured local share folder has {shared_files} files ({format_gigabytes(shared_bytes)} GB)."
         )
     else:
         summary = (
@@ -355,11 +367,12 @@ def print_share_help():
     print(
         "Sharing & community (setseeker wrapper)\n"
         "- This flow lives in seekspawner.py, without modifying slsk-batchdl.\n"
-        "- Default share folder is 'spoils' (the download folder).\n"
+        "- setseeker does not broadcast files to Soulseek by itself.\n"
+        "- Default local share folder is 'spoils' (the download folder).\n"
         "- Change it with --share-dir <path>, or disable local sharing with --no-share-dir.\n"
-        "- If no share folder is configured, a reminder is shown at run start.\n"
+        "- If no local share folder is configured, a one-time reminder is shown at run start.\n"
         "- If you already share elsewhere, persistently silence that reminder with --disable-share-reminder.\n"
-        "- Use --skip-share-check for a one-run bypass."
+        "- Use --skip-share-reminder for a one-run bypass."
     )
 
 
@@ -369,15 +382,19 @@ def apply_community_arg_overrides(state, args):
     if args.share_dir is not None:
         normalized = resolve_share_dir(args.share_dir)
         state["share_dir"] = str(normalized) if normalized is not None else ""
+        if normalized is None:
+            state["no_share_notice_seen"] = False
         changed = True
     if args.no_share_dir:
         state["share_dir"] = ""
+        state["no_share_notice_seen"] = False
         changed = True
     if args.disable_share_reminder:
         state["suppress_no_share_reminder"] = True
         changed = True
     if args.enable_share_reminder:
         state["suppress_no_share_reminder"] = False
+        state["no_share_notice_seen"] = False
         changed = True
 
     return changed
@@ -480,9 +497,9 @@ def sendseek(args, state):
 
     share_dir = resolve_share_dir(state.get("share_dir", DEFAULT_SHARE_DIR))
     if share_dir is not None:
-        print(f"Community share folder: {share_dir}")
+        print(f"Configured local share folder (not auto-broadcast by setseeker): {share_dir}")
 
-    maybe_print_no_share_reminder(state, share_dir, skip_share_check=args.skip_share_check)
+    maybe_print_no_share_reminder(state, share_dir, skip_share_reminder=args.skip_share_reminder)
 
     global SLSK_USER, SLSK_PW
     SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
@@ -530,9 +547,14 @@ def parse_args():
         help="Disable local share folder (opt out).",
     )
     parser.add_argument(
-        "--skip-share-check",
+        "--skip-share-reminder",
         action="store_true",
         help="Skip sharing reminder for this run only.",
+    )
+    parser.add_argument(
+        "--skip-share-check",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--disable-share-reminder",
@@ -564,6 +586,8 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.skip_share_check:
+        args.skip_share_reminder = True
 
     if args.help_share:
         print_share_help()

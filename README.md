@@ -36,12 +36,13 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
 
 The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not by patching upstream `slsk-batchdl`.
 
+- `setseeker` does **not** broadcast/share files on Soulseek by itself
 - Default local share folder is the download folder: `spoils/`
 - Change local share folder with `--share-dir <path>`
 - Opt out of local share folder with `--no-share-dir`
-- If no local share folder is configured, a reminder is shown at run start
+- If no local share folder is configured, a one-time reminder is shown at run start
 - If you already broadcast elsewhere, mute that reminder with `--disable-share-reminder`
-- `--skip-share-check` bypasses reminder for one run
+- `--skip-share-reminder` bypasses reminder for one run
 - Session and cumulative share-vs-download stats are tracked
 - Local state lives at `user/community_state.json`
 
@@ -108,7 +109,7 @@ The sharing etiquette flow is implemented in `seekspawner.py` (your repo), not b
    - **Skip share reminder for one run**
 
      ```
-     ./launcher.sh --skip-share-check
+     ./launcher.sh --skip-share-reminder
      ```
 
    - **Mute reminder if you already share elsewhere**
