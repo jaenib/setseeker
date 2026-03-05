@@ -4,9 +4,16 @@ import subprocess
 import glob
 import re
 import shutil
+import sys
 from getpass import getpass
 from pathlib import Path
-from cryptography.fernet import Fernet
+
+try:
+    from cryptography.fernet import Fernet
+except ModuleNotFoundError:
+    print("Missing Python package 'cryptography'.")
+    print("Run './setup.sh' once, or './launcher.sh --doctor' to auto-fix the environment.")
+    sys.exit(1)
 
 
 # ---------- SETTINGS -----------------------------

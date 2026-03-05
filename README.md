@@ -43,38 +43,33 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
 ## Run it
 
 1. Drop MP3s into `sets/` or point `fileshazzer.py` at a SoundCloud link (the `soundcloud_url` variable near the top).
-2. Activate the virtualenv:
+2. Run the launcher directly (no manual venv activation needed):
 
    ```
-   source .venv/bin/activate
+   chmod +x launcher.sh
+   ./launcher.sh
    ```
 
-3. Pick your workflow:
+   `launcher.sh` auto-checks/fixes `.venv`, validates required tools, then runs `fileshazzer.py` followed by `seekspawner.py`.
 
-   - **Full pipeline (Shazam + Soulseek download)**
+3. Optional helper modes:
 
-     ```
-     chmod +x launcher.sh
-     ./launcher.sh
-     ```
-
-     `launcher.sh` activates the venv, runs `fileshazzer.py`, then immediately hands the fresh queries to `seekspawner.py`.
-
-   - **Just fingerprint and build tracklists**
+   - **Environment doctor (recommended for troubleshooting)**
 
      ```
-     python3.11 fileshazzer.py
+     ./launcher.sh --doctor
      ```
 
-     Tracklists (and their original MP3s) end up under `tracklists/<set_name>/`. If Shazam throttles and things look frozen, give it a minute—it will continue. Want more reliable matches? Bump `segment_length` (default `60` seconds) at the top of the script so each chunk contains more audio.
-
-   - **Already have a tracklist and only need Soulseek**
+   - **Just fingerprint and build tracklists (no Soulseek download step)**
 
      ```
-     python3.11 seekspawner.py
+     ./launcher.sh --identify-only
      ```
 
-     The script looks for `*.txt` tracklists under `tracklists/`, parses them into `tmp/queries/queries.txt`, and fires those queries at Soulseek. You can drop your own tracklist files in there as long as they follow the same `[hh:mm:ss] Artist - Title` format.
+4. Advanced/manual mode:
+
+   - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
+   - `python3.11 seekspawner.py` for only the Soulseek download stage
 
 `seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
 

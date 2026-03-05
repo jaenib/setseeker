@@ -2,12 +2,21 @@ import sys
 import os
 import subprocess
 import asyncio
-from shazamio import Shazam
 import scdl
+
+try:
+    from shazamio import Shazam
+except ModuleNotFoundError:
+    print("Missing Python package 'shazamio'.")
+    print("Run './setup.sh' once, or './launcher.sh --doctor' to auto-fix the environment.")
+    sys.exit(1)
 
 # Segment length in seconds
 segment_length = 60  # Default 30s go up if your set consists of longer tracks
 soundcloud_url = ""  # Example URL
+recognition_retries = 4
+recognition_retry_delay = 1.5
+recognition_request_spacing = 0.35
 
 # Directories
 INPUT_DIR = "sets"  # MP3 files
@@ -18,21 +27,89 @@ os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
 
+async def recognize_segment(shazam, file_path):
+    # Support both recent and older shazamio APIs.
+    if hasattr(shazam, "recognize"):
+        return await shazam.recognize(file_path)
+    if hasattr(shazam, "recognize_song"):
+        return await shazam.recognize_song(file_path)
+    raise AttributeError("Unsupported shazamio version: missing recognize methods")
+
+def is_retryable_shazam_error(error):
+    message = str(error)
+    retryable_snippets = (
+        "URL is invalid",
+        "Cannot connect to host",
+        "Server disconnected",
+        "Timeout",
+        "429",
+    )
+    return any(snippet in message for snippet in retryable_snippets)
+
+async def recognize_segment_with_retry(file_path, max_attempts, base_delay):
+    last_error = None
+    endpoint_countries = ("US", "GB")
+    for attempt in range(1, max_attempts + 1):
+        endpoint_country = endpoint_countries[(attempt - 1) % len(endpoint_countries)]
+        shazam = Shazam(language="en-US", endpoint_country=endpoint_country)
+        try:
+            return await recognize_segment(shazam, file_path)
+        except Exception as exc:
+            last_error = exc
+            if attempt >= max_attempts or not is_retryable_shazam_error(exc):
+                raise
+            wait_seconds = base_delay * attempt
+            if attempt == 1:
+                print(
+                    f"Transient Shazam response issue for {os.path.basename(file_path)}; "
+                    f"retrying up to {max_attempts} attempts..."
+                )
+            await asyncio.sleep(wait_seconds)
+    raise last_error
+
 # Split set audio into segments
 def split_audio(input_file, segment_length):
     print(f"Splitting {input_file} into {segment_length}-second chunks...")
     base_name = os.path.splitext(os.path.basename(input_file))[0]
     segment_pattern = os.path.join(SEGMENTS_DIR, f"{base_name}_%03d.mp3")
 
-    #command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -segment_format mp3 -reset_timestamps 1 -map 0 -codec copy \"{segment_pattern}\""
-    command = f"ffmpeg -i \"{input_file}\" -f segment -segment_time {segment_length} -ar 44100 -ac 2 -b:a 192k \"{segment_pattern}\""
+    # Keep ffmpeg output clean and exclude attached picture streams from source MP3s.
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostats",
+        "-y",
+        "-i",
+        input_file,
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-sn",
+        "-dn",
+        "-map_metadata",
+        "-1",
+        "-f",
+        "segment",
+        "-segment_time",
+        str(segment_length),
+        "-segment_format",
+        "mp3",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-b:a",
+        "192k",
+        segment_pattern,
+    ]
 
-    subprocess.run(command, shell=True, check=True)
+    subprocess.run(command, check=True)
 
 # Recognize tracks with ShazamIO
 async def recognize_tracks(segment_length):
     print("Recognizing tracks with Shazam...")
-    shazam = Shazam()
     track_list = []
 
     for file in sorted(os.listdir(SEGMENTS_DIR)):
@@ -45,7 +122,11 @@ async def recognize_tracks(segment_length):
             timestamp = f"{timestamp_seconds // 3600:02}:{(timestamp_seconds % 3600) // 60:02}:{timestamp_seconds % 60:02}"
 
             try:
-                result = await shazam.recognize(file_path)
+                result = await recognize_segment_with_retry(
+                    file_path=file_path,
+                    max_attempts=recognition_retries,
+                    base_delay=recognition_retry_delay,
+                )
                 if "track" in result:
                     title = result["track"]["title"]
                     artist = result["track"]["subtitle"]
@@ -54,7 +135,14 @@ async def recognize_tracks(segment_length):
                 else:
                     print(f"[{timestamp}] No match found for {file}")
             except Exception as e:
-                print(f"Error processing {file}: {e}")
+                if is_retryable_shazam_error(e):
+                    print(f"[{timestamp}] Shazam temporary response issue for {file}; skipped after retries.")
+                else:
+                    compact_error = str(e).splitlines()[0]
+                    print(f"Error processing {file}: {type(e).__name__}: {compact_error}")
+            finally:
+                # Small pacing helps reduce transient API failures from bursty requests.
+                await asyncio.sleep(recognition_request_spacing)
 
     return track_list
 
@@ -108,18 +196,26 @@ if __name__ == "__main__":
     sets = [f for f in os.listdir(INPUT_DIR) if f.endswith(".mp3")]
     
     if not sets:
-        print("No MP3 files in 'sets' folder.\n")
+        print("No MP3 files in 'sets/' folder.\n")
         if soundcloud_url == "":
-            print("No links provided yet either\n")
-            answer = input("- To continue paste a soundcloud link ↵\n-To roll with my recommendation instead, type 'r' ↵\n-To quit, type 'q' ↵").lower()
-            if answer.lower() == ("r"):
-                print("You'll regret nothing")
+            if not sys.stdin.isatty():
+                print("No interactive terminal detected.")
+                print("Add MP3 files to sets/ or set soundcloud_url in fileshazzer.py, then rerun.")
+                sys.exit(0)
+
+            answer = input(
+                "Paste a SoundCloud URL, type 'r' for a demo URL, or 'q' to quit: "
+            ).strip()
+            if answer.lower() == "r":
                 soundcloud_url = "https://soundcloud.com/accceler/strobilate-16082020"
-            elif answer.lower() == ("q"):
-                print("weak")
-                quit()
+            elif answer.lower() == "q":
+                print("Exiting without changes.")
+                sys.exit(0)
+            elif answer:
+                soundcloud_url = answer
             else:
-                soundcloud_url = str(answer)
-    
+                print("No URL provided. Exiting without changes.")
+                sys.exit(0)
+
         scdl.main(soundcloud_url)
     asyncio.run(main(segment_length))

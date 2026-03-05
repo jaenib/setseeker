@@ -1,4 +1,6 @@
-shazamio
+# Newer shazamio releases require shazamio-core>=1.0.7, whose sdist is currently broken.
+# Pin to latest release that installs without shazamio-core.
+shazamio==0.4.0.1
 cryptography
 soundcloud-lib
 ffmpeg
