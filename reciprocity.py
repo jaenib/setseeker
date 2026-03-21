@@ -243,11 +243,19 @@ class SlskdApiClient:
             with urllib.request.urlopen(request, timeout=5) as response:
                 response_payload = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
+            error_payload = ""
+            try:
+                error_payload = exc.read().decode("utf-8", errors="replace").strip()
+            except Exception:
+                error_payload = ""
             if exc.code in {401, 403}:
                 raise ReciprocityAuditError(
                     "slskd authentication failed; check API key or web credentials"
                 ) from exc
-            raise ReciprocityAuditError(f"slskd API returned HTTP {exc.code} for {path}") from exc
+            detail = f"slskd API returned HTTP {exc.code} for {path}"
+            if error_payload:
+                detail = f"{detail}: {error_payload}"
+            raise ReciprocityAuditError(detail) from exc
         except urllib.error.URLError as exc:
             raise ReciprocityAuditError(f"could not reach slskd at {self.base_url}: {exc.reason}") from exc
 

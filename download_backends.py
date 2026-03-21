@@ -231,13 +231,7 @@ class SlskdDownloadBackend:
 
     def _download_single_query(self, query: TrackQuery) -> TrackDownloadResult:
         search_id = uuid.uuid4()
-        self.client.create_search(
-            search_id=search_id,
-            search_text=query.search_text,
-            search_timeout=self.config.slskd.search_timeout_seconds,
-            response_limit=self.config.slskd.response_limit,
-            file_limit=self.config.slskd.file_limit,
-        )
+        self._create_search_with_retry(search_id, query)
 
         try:
             search = self._wait_for_search(search_id)
@@ -278,6 +272,35 @@ class SlskdDownloadBackend:
             local_path=local_path,
             size_bytes=_safe_int(_dict_get_ci(transfer, "size"), candidate["size"]),
         )
+
+    def _create_search_with_retry(self, search_id, query: TrackQuery):
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                self.client.create_search(
+                    search_id=search_id,
+                    search_text=query.search_text,
+                    search_timeout=self.config.slskd.search_timeout_seconds,
+                    response_limit=self.config.slskd.response_limit,
+                    file_limit=self.config.slskd.file_limit,
+                )
+                return
+            except ReciprocityAuditError as exc:
+                last_error = exc
+                if attempt < 3 and self._backend_is_reconnecting(exc):
+                    self.echo(
+                        "  slskd is reconnecting to Soulseek; waiting for login before retrying this search..."
+                    )
+                    if self._wait_for_backend_login(timeout_seconds=90):
+                        continue
+                    raise ReciprocityAuditError(
+                        "slskd lost its logged-in Soulseek state and did not recover within 90 seconds"
+                    ) from exc
+                raise
+
+        if last_error is not None:
+            raise last_error
+        raise ReciprocityAuditError("slskd search could not be created for an unknown reason")
 
     def _wait_for_search(self, search_id):
         deadline = time.monotonic() + max(self.config.slskd.search_timeout_seconds + 10, 15)
@@ -393,6 +416,36 @@ class SlskdDownloadBackend:
             return True
         state = str(_dict_get_ci(search, "state") or "")
         return "completed" in state.lower()
+
+    def _backend_is_reconnecting(self, error: Exception) -> bool:
+        message = str(error).lower()
+        if "logged in to perform a search" in message:
+            return True
+        if "loggingin" in message or "logging in" in message:
+            return True
+        if "http 409" not in message:
+            return False
+        try:
+            application = self.client.get_application()
+        except Exception:
+            return False
+        server = application.get("server", {}) if isinstance(application, dict) else {}
+        return not bool(server.get("isLoggedIn", False))
+
+    def _wait_for_backend_login(self, timeout_seconds: int) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                application = self.client.get_application()
+            except Exception:
+                self.sleep(1.0)
+                continue
+
+            server = application.get("server", {}) if isinstance(application, dict) else {}
+            if bool(server.get("isLoggedIn", False)):
+                return True
+            self.sleep(1.0)
+        return False
 
     def _match_transfer(self, transfers: Sequence[dict], transfer_id: str, remote_filename: str) -> Optional[dict]:
         if transfer_id:
