@@ -1,166 +1,170 @@
 # setseeker
 
-`fileshazzer.py` splits DJ sets (or any MP3 you throw at it) into segments, runs them through Shazam, and spits out a timestamped tracklist. `seekspawner.py` turns those IDs into Soulseek searches and downloads through a configured backend. Normal mode now runs on top of [`slskd`](https://github.com/slskd/slskd); the old [`slsk-batchdl`](https://github.com/fiso64/slsk-batchdl) path remains only as an explicit legacy fallback.
+`setseeker` takes DJ sets or other long-form audio, identifies tracks with Shazam, and then looks for those tracks on Soulseek through [`slskd`](https://github.com/slskd/slskd).
+
+Normal download mode is not download-only anymore. Before any Soulseek transfer starts, `setseeker` runs a reciprocity audit against a real `slskd` daemon and blocks downloads when that backend is not healthy enough to contribute back.
+
+`setseeker` itself is still not the long-lived share-capable client. `slskd` is the share-capable part, and `setseeker` now depends on it instead of pretending otherwise.
 
 ## Requirements
 
 - Python 3.11
-- [`ffmpeg`](https://ffmpeg.org/) command line tool available on your `$PATH`
-- `slskd` for normal download mode
-- Optional: [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) only if you want the legacy `slsk-batchdl` fallback
-- `git` (only needed if you want setup to clone/build the optional legacy backend)
+- [`ffmpeg`](https://ffmpeg.org/) on your `PATH`
+- `slskd` for Soulseek search/download/share participation
 
-`setup.sh` handles the Python environment and folders. It also bootstraps a repo-local `slskd` instance for the recommended mode. It only builds `slsk-batchdl` if `.NET` is already installed.
+`setup.sh` handles the Python environment and will bootstrap a repo-local `slskd` automatically if you do not already have one.
 
 ## Setup
 
 From the repo root:
 
-```
+```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-What that script takes care of:
+`setup.sh` will:
 
-- Creates a fresh virtual environment at `.venv` and installs `requirements.txt`
-- Checks for `ffmpeg`; will try to install it if the binary isn't found
-- Downloads and bootstraps a repo-local `slskd` if needed, using your stored Soulseek credentials
-- Creates a local `slskd` app/config under `user/slskd/`
-- If `.NET` is already installed, clones and builds the optional legacy `slsk-batchdl` backend
-- Sets up the working folders: `sets`, `tracklists`, `spoils`, `user`, `logs`, `tmp/segments`, `tmp/queries`
-- Uses one credential location: `user/slsk_cred.json` + `user/slsk.key`
-- If old credentials exist in `../user/`, offers to import them so you don't lose your previous setup
-- Supports non-interactive setup with `SLSK_USERNAME` and `SLSK_PASSWORD` if you prefer
+- create `.venv` and install `requirements.txt`
+- check for `ffmpeg` and try to install it if missing
+- create the working folders: `sets`, `tracklists`, `spoils`, `user`, `logs`, `tmp/segments`, `tmp/queries`
+- store encrypted Soulseek credentials in `user/slsk_cred.json` and `user/slsk.key`
+- offer to import legacy credentials from `../user/`
+- bootstrap a repo-local `slskd` under `user/slskd/`
+- write `user/reciprocity_config.json`
 
-You can rerun `setup.sh` any time; it will reuse what already exists, repair the local `slskd` setup if needed, offer to rotate credentials, and rebuild the optional legacy backend if available.
+You can rerun `setup.sh` any time. It reuses existing state, repairs the local `slskd` bootstrap if needed, and lets you rotate credentials.
 
-## Reciprocity Gate
+## What Is Actually Checked
 
-Normal download mode now requires a real `slskd` backend that passes a reciprocity audit.
+Before downloads begin, `setseeker` audits the configured `slskd` instance. The gate is based on real daemon state, not warning text.
 
-- `setseeker` itself is still not the long-lived share-capable client
-- the audit is backed by live `slskd` state, not warning text
-- downloads are blocked by default when reciprocity is unhealthy
-- normal search/download execution also goes through `slskd`
-- the old `slsk-batchdl` path is legacy-only and still runs with `--no-modify-share-count`
-- if no local `slskd` is present yet, `setup.sh` and `launcher.sh` will bootstrap one automatically in `user/slskd/`
+It checks:
 
-See [docs/reciprocity_audit.md](docs/reciprocity_audit.md) and [docs/slskd_reciprocity_setup.md](docs/slskd_reciprocity_setup.md).
+- at least one shared directory is configured
+- share scanning completed successfully
+- shared folder count is nonzero
+- shared file count is nonzero
+- the Soulseek listen port is configured and, when `slskd` is local, accepting local TCP connections
+- the daemon is logged in and upload-capable
+- the daemon is online as the long-lived share-capable backend
+- the Soulseek account in `slskd` matches the downloader account used by `setseeker`
+
+If any blocking check fails, normal download mode stops and prints exact remediation steps.
+
+Read more in [docs/reciprocity_audit.md](docs/reciprocity_audit.md) and [docs/slskd_reciprocity_setup.md](docs/slskd_reciprocity_setup.md).
 
 ## Soulseek Login Flow
 
 `seekspawner.py` resolves credentials in this order:
 
 1. `SLSK_USERNAME` + `SLSK_PASSWORD` environment variables
-2. Encrypted files in `user/`
-3. Interactive prompt (with option to save encrypted credentials for next run)
+2. encrypted files in `user/`
+3. interactive prompt, with an option to save encrypted credentials
 
-## Run it
+## Run It
 
-1. Run the launcher directly (no manual venv activation needed):
+Run the launcher directly. Manual venv activation is not required.
 
-   ```
-   chmod +x launcher.sh
-   ./launcher.sh "<source>"
-   ```
+```bash
+chmod +x launcher.sh
+./launcher.sh "<source>"
+```
 
-   `source` can be:
-   - a YouTube URL (video or playlist)
-   - a SoundCloud URL (track or playlist)
-   - a local audio file path (mp3/wav/flac/...)
-   - a local folder path with audio files
+`source` can be:
 
-   `launcher.sh` auto-checks/fixes `.venv`, ingests/downloads audio into `sets/`, then runs `fileshazzer.py` followed by `seekspawner.py`.
+- a YouTube URL
+- a SoundCloud URL
+- a local audio file path
+- a local folder containing audio files
 
-2. Local file fallback is still supported:
+`launcher.sh` will:
 
-   - put MP3 files directly in `sets/`
-   - then run:
+- auto-repair `.venv` if needed
+- auto-bootstrap local `slskd` if needed
+- ingest audio into `sets/`
+- run `fileshazzer.py`
+- run the reciprocity doctor/gate
+- search and download through `slskd`
 
-   ```
-   ./launcher.sh
-   ```
+If you already placed MP3s in `sets/`, you can also just run:
 
-3. Optional helper modes:
+```bash
+./launcher.sh
+```
 
-   - **Environment + reciprocity doctor**
+## Useful Commands
 
-     ```
-     ./launcher.sh --doctor
-     ```
+Environment + reciprocity doctor:
 
-   - **Just fingerprint and build tracklists (no Soulseek download step)**
+```bash
+./launcher.sh --doctor
+```
 
-     ```
-     ./launcher.sh --identify-only "<source>"
-     ```
+Identify tracks only, no Soulseek step:
 
-   - **Re-run against all historical tracklists (legacy tracklist scope)**
+```bash
+./launcher.sh --identify-only "<source>"
+```
 
-     ```
-     ./launcher.sh --all-tracklists
-     ```
+Include all historical tracklists instead of just the latest run:
 
-   - **Unsafe override for development/testing**
+```bash
+./launcher.sh --all-tracklists
+```
 
-     ```
-     ./launcher.sh --unsafe-disable-reciprocity-gate "<source>"
-     ```
+Unsafe development override for the reciprocity gate:
 
-   - **Force a specific download backend**
+```bash
+./launcher.sh --unsafe-disable-reciprocity-gate "<source>"
+```
 
-     ```
-     ./launcher.sh --download-backend slskd "<source>"
-     ./launcher.sh --download-backend legacy-sldl "<source>"
-     ```
+Manual script entry points:
 
-4. Advanced/manual mode (if you want to run scripts yourself):
-
-   - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
-   - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
-   - `python3.11 seekspawner.py` for only the Soulseek download stage
-   - `python3.11 seekspawner.py --doctor` for reciprocity doctor output
-   - `python3.11 seekspawner.py --all-tracklists` to include all historical tracklists
-   - `python3.11 seekspawner.py --download-backend slskd`
-   - `python3.11 seekspawner.py --download-backend legacy-sldl`
-   - `python3.11 seekspawner.py --unsafe-disable-reciprocity-gate` to bypass blocking for development/testing only
-   - `python3.11 slskd_manager.py status` to inspect the repo-local `slskd` bootstrap state
+```bash
+python3.11 ingest.py --source "<source>"
+python3.11 fileshazzer.py
+python3.11 seekspawner.py
+python3.11 seekspawner.py --doctor
+python3.11 seekspawner.py --all-tracklists
+python3.11 seekspawner.py --unsafe-disable-reciprocity-gate
+python3.11 slskd_manager.py status
+```
 
 ## slskd Setup
 
-`setseeker` looks for `user/reciprocity_config.json`.
+`setseeker` reads `user/reciprocity_config.json`.
 
-Start from [reciprocity_config.example.json](reciprocity_config.example.json), then point it at your `slskd` instance.
+You can start from [reciprocity_config.example.json](reciprocity_config.example.json), but the local bootstrap writes this file for you automatically in the normal case.
 
-The configured `slskd` backend should:
+The configured `slskd` instance should:
 
 - use the same Soulseek username as `setseeker`
-- have at least one shared directory configured
-- complete a healthy share scan
-- report nonzero shared folders and files
-- stay online as the real share-capable client
-- expose a downloads directory on the same machine if you want completed files mirrored into `spoils/`
+- have one or more explicit shared directories
+- finish a healthy share scan with nonzero files/folders
+- stay online as the actual share-capable client
+- expose a readable downloads directory if you want files mirrored into `spoils/`
 
-By default, the automatic bootstrap creates a repo-local `slskd` config that:
+The repo-local bootstrap defaults to:
 
-- runs the web/API on `127.0.0.1`
-- downloads into `spoils/`
-- uses `tmp/slskd-incomplete/` for partial files
-- shares `spoils/` unless you choose another folder during setup
+- web/API on `127.0.0.1`
+- downloads in `spoils/`
+- incomplete files in `tmp/slskd-incomplete/`
+- sharing `spoils/` unless you choose another folder during setup
 
-Normal mode searches and enqueues downloads through `slskd`. If `slskd` runs locally and its downloads directory is readable, `setseeker` mirrors completed files into `spoils/`. If not, the files stay in the daemon's own downloads directory and `setseeker` tells you that explicitly.
+Normal mode searches and enqueues downloads through `slskd`. If `slskd` is local and its downloads directory is readable, `setseeker` mirrors completed files into `spoils/`. Otherwise the files stay in the daemon's own downloads directory and the output says so explicitly.
 
-`seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`. When local mirroring is available, completed downloads are copied or hard-linked into `spoils/`.
+`seekspawner.py` logs skipped tracklist lines to `logs/skipped_queries.log`.
 
-### Why you might see "already exist"
+## Why You Might See "Already Exist"
 
-Setseeker now queries only tracklists from the **latest `fileshazzer` run** by default to reduce noisy re-checks across old sets.
-If you explicitly choose `--all-tracklists`, expect more `already exist` lines.
+By default, `setseeker` only queries tracklists from the latest `fileshazzer` run. That reduces pointless re-checks against older sets.
 
-## Example tracklist output
+If you explicitly use `--all-tracklists`, more duplicate/existing-file messages are expected.
 
-```
+## Example Tracklist Output
+
+```text
 Final Tracklist:
 [00:01:00] Umek - Center of Gravity
 [00:13:30] Sade - Like Tattoo

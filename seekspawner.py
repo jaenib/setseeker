@@ -8,7 +8,7 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-from download_backends import DownloadRunSummary, SldlDownloadBackend, SlskdDownloadBackend, TrackQuery
+from download_backends import SlskdDownloadBackend, TrackQuery
 from reciprocity import ReciprocityAuditError, ReciprocityConfig, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
 
 try:
@@ -21,11 +21,9 @@ except ModuleNotFoundError:
 
 # ---------- SETTINGS -----------------------------
 TRACKLIST_DIR = "tracklists"
-QUERYFILE_PATH = "tmp/queries/queries.txt"
 SKIPPED_PATH = "logs/skipped_queries.log"
 TRACKLIST_MANIFEST_PATH = Path("tmp/queries/tracklists_last_run.txt")
 
-SLSKDL_EXECUTABLE = "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll"
 CREDENTIAL_DIR = Path("user")
 LEGACY_CREDENTIAL_DIRS = [Path("../user")]
 DOWNLOAD_DIR = Path("spoils")
@@ -292,31 +290,7 @@ def build_track_queries(tracklist_dir, use_last_run_only=True):
     return track_queries
 
 
-def legacy_query_line(track_query):
-    base = f"\"artist={track_query.artist},title={track_query.title}\""
-    if track_query.format == "mp3":
-        return f'{base}  "format=mp3"  "br >= {track_query.min_bitrate}"'
-    return f'{base}  "format=flac"'
-
-
-def write_legacy_query_file(track_queries, output_query_file=QUERYFILE_PATH):
-    with open(output_query_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(legacy_query_line(track_query) for track_query in track_queries))
-    print(f"Wrote {len(track_queries)} legacy sldl queries to {output_query_file}")
-
-
-def select_download_backend(args, reciprocity_config):
-    if args.download_backend != "auto":
-        return args.download_backend
-    if reciprocity_config.backend == "slskd":
-        return "slskd"
-    return "legacy-sldl"
-
-
 def print_backend_summary(summary):
-    if summary.backend == "legacy-sldl":
-        print("Legacy sldl backend finished.")
-        return
     print(
         f"slskd backend summary: requested {summary.requested_count}, "
         f"downloaded {summary.succeeded_count}, missed {summary.missed_count}, failed {summary.failed_count}."
@@ -352,26 +326,8 @@ def sendseek(args, track_queries):
     else:
         print_reciprocity_pass(reciprocity_status)
 
-    backend_name = select_download_backend(args, reciprocity_config)
-    print(f"Download backend selected: {backend_name}")
-
-    if backend_name == "slskd":
-        backend = SlskdDownloadBackend(reciprocity_config, output_dir=DOWNLOAD_DIR)
-    elif backend_name == "legacy-sldl":
-        write_legacy_query_file(track_queries, QUERYFILE_PATH)
-        env = os.environ.copy()
-        env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
-        env["PATH"] = f'{env["DOTNET_ROOT"]}:{env["PATH"]}'
-        backend = SldlDownloadBackend(
-            executable=SLSKDL_EXECUTABLE,
-            queryfile_path=Path(QUERYFILE_PATH),
-            username=SLSK_USER,
-            password=SLSK_PW,
-            output_dir=DOWNLOAD_DIR,
-            env=env,
-        )
-    else:
-        raise SystemExit(f"Unsupported download backend: {backend_name}")
+    print("Download backend: slskd")
+    backend = SlskdDownloadBackend(reciprocity_config, output_dir=DOWNLOAD_DIR)
 
     spoils_before = count_files_and_size(DOWNLOAD_DIR, audio_only=True)
     try:
@@ -387,7 +343,7 @@ def sendseek(args, track_queries):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert tracklists into download queries and fetch them through the configured Soulseek backend.",
+        description="Convert tracklists into download queries and fetch them through slskd.",
     )
     parser.add_argument(
         "--doctor",
@@ -398,12 +354,6 @@ def parse_args():
         "--unsafe-disable-reciprocity-gate",
         action="store_true",
         help="Bypass the reciprocity gate for development/testing only.",
-    )
-    parser.add_argument(
-        "--download-backend",
-        choices=("auto", "slskd", "legacy-sldl"),
-        default="auto",
-        help="Choose the download backend. Default: auto (prefer slskd when configured).",
     )
     parser.add_argument(
         "--all-tracklists",

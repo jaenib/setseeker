@@ -7,14 +7,14 @@ import reciprocity
 
 
 class ReciprocityTests(unittest.TestCase):
-    def test_missing_backend_blocks(self):
+    def test_missing_slskd_config_blocks(self):
         status = reciprocity.evaluate_reciprocity_status(
             reciprocity.ReciprocityConfig(),
             expected_username="alice",
         )
 
         self.assertFalse(status.overall_ok)
-        self.assertIn("No reciprocity backend is configured.", status.blocking_reasons)
+        self.assertIn("slskd is not configured yet.", status.blocking_reasons)
 
     def test_account_mismatch_blocks(self):
         snapshot = reciprocity.SlskdSnapshot(
@@ -35,7 +35,7 @@ class ReciprocityTests(unittest.TestCase):
 
         status = reciprocity.evaluate_slskd_snapshot(
             snapshot,
-            reciprocity.ReciprocityConfig(backend="slskd", slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
             expected_username="alice",
         )
 
@@ -61,7 +61,7 @@ class ReciprocityTests(unittest.TestCase):
 
         status = reciprocity.evaluate_slskd_snapshot(
             snapshot,
-            reciprocity.ReciprocityConfig(backend="slskd", slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
             expected_username="alice",
         )
 
@@ -76,7 +76,6 @@ class ReciprocityTests(unittest.TestCase):
             config_path.write_text(
                 (
                     '{'
-                    '"backend":"slskd",'
                     '"slskd":{"url":"http://127.0.0.1:5030","api_key":"abc123","require_same_username":true}'
                     '}'
                 ),

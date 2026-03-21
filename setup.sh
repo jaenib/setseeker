@@ -79,32 +79,7 @@ if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] &
     fi
 fi
 
-# 4. Legacy sldl backend is optional; normal mode prefers slskd.
-dotnet_missing=true
-if command -v dotnet &> /dev/null; then
-    echo ".NET SDK found. Building optional legacy slsk-batchdl backend..."
-    dotnet_missing=false
-    export DOTNET_ROOT=/usr/local/share/dotnet
-    export PATH=$DOTNET_ROOT:$PATH
-    echo "Setting up .NET environment variables DOTNET_ROOT and PATH..."
-
-    # Clone slsk-batchdl if not present
-    if [ ! -d "slsk-batchdl" ]; then
-        echo "Cloning slsk-batchdl..."
-        git clone https://github.com/fiso64/slsk-batchdl.git
-    else
-        echo "slsk-batchdl already cloned."
-    fi
-
-    # Build slsk-batchdl
-    echo "Building optional slsk-batchdl legacy backend..."
-    (cd slsk-batchdl/slsk-batchdl && dotnet build -c Release)
-else
-    echo "Skipping optional slsk-batchdl legacy backend (.NET SDK not found)."
-    echo "Normal setseeker downloads now run through slskd instead."
-fi
-
-# 5. Prompt to create Soulseek credentials file
+# 4. Prompt to create Soulseek credentials file
 if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
     echo "Encrypted Soulseek credentials already exist at $CRED_FILE"
     read -p "Change credentials now? (y/N) " change_answer
@@ -151,8 +126,7 @@ if python slskd_manager.py ensure; then
     echo "Local slskd is ready."
 else
     echo "Automatic slskd setup did not complete."
-    echo "You can rerun ./setup.sh after fixing network/permissions, or use:"
-    echo "  ./launcher.sh --download-backend legacy-sldl ..."
+    echo "You can rerun ./setup.sh after fixing network or permissions."
 fi
 
 echo "setseek setup success"

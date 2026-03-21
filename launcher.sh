@@ -8,7 +8,6 @@ MODE="full"
 SOURCE=""
 FILESHAZZER_ARGS=()
 SEEKSPAWNER_ARGS=()
-DOWNLOAD_BACKEND_OVERRIDE="auto"
 
 print_help() {
     cat <<'EOF'
@@ -25,7 +24,6 @@ options:
   --doctor, --check          Validate environment and print reciprocity diagnostics
   --identify-only            Ingest + Shazam tracklist only (skip Soulseek download)
   --all-tracklists           Query all historical tracklists (legacy behavior)
-  --download-backend <name>  Choose auto, slskd, or legacy-sldl
   --unsafe-disable-reciprocity-gate
                             Bypass reciprocity blocking for development/testing only
   --source, -s <source>      Explicit source (equivalent to positional source)
@@ -50,15 +48,6 @@ while [[ $# -gt 0 ]]; do
         --unsafe-disable-reciprocity-gate)
             SEEKSPAWNER_ARGS+=("--unsafe-disable-reciprocity-gate")
             shift
-            ;;
-        --download-backend)
-            if [[ $# -lt 2 ]]; then
-                echo "Missing value for $1"
-                exit 1
-            fi
-            DOWNLOAD_BACKEND_OVERRIDE="$2"
-            SEEKSPAWNER_ARGS+=("--download-backend" "$2")
-            shift 2
             ;;
         --source|-s)
             if [[ $# -lt 2 ]]; then
@@ -194,24 +183,6 @@ check_runtime_tools_for_mode() {
         echo "Run ./setup.sh (or install ffmpeg manually), then try again."
         exit 1
     fi
-
-    local effective_backend
-    effective_backend="$(resolve_download_backend)"
-    if [ "$MODE" != "identify" ]; then
-        if [ "$effective_backend" = "legacy-sldl" ]; then
-            if ! command -v dotnet &> /dev/null; then
-                echo ".NET SDK (dotnet) is missing."
-                echo "Install .NET 6 only if you want the legacy-sldl backend, or switch to slskd."
-                exit 1
-            fi
-
-            if [ ! -f "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll" ]; then
-                echo "slsk-batchdl is not built yet."
-                echo "Run ./setup.sh once to build the legacy backend, or switch to slskd."
-                exit 1
-            fi
-        fi
-    fi
 }
 
 doctor_report() {
@@ -219,11 +190,6 @@ doctor_report() {
     echo "- python: $(python --version 2>&1)"
     echo "- pip: $(python -m pip --version)"
     echo "- ffmpeg: $(command -v ffmpeg)"
-    if command -v dotnet &> /dev/null; then
-        echo "- dotnet: $(dotnet --version)"
-    else
-        echo "- dotnet: not found"
-    fi
     echo "- mode: $MODE"
     if [[ -n "$SOURCE" ]]; then
         echo "- source: $SOURCE"
@@ -233,14 +199,11 @@ doctor_report() {
     else
         echo "- yt-dlp: not on PATH (launcher uses Python yt-dlp package)"
     fi
-    echo "- download backend: $(resolve_download_backend)"
+    echo "- download backend: slskd"
 }
 
 ensure_recommended_slskd() {
     if [[ "$MODE" == "identify" ]]; then
-        return
-    fi
-    if [[ "$DOWNLOAD_BACKEND_OVERRIDE" == "legacy-sldl" ]]; then
         return
     fi
 
@@ -251,8 +214,7 @@ ensure_recommended_slskd() {
 
     if ! python "${bootstrap_args[@]}"; then
         echo "Failed to prepare the recommended local slskd backend."
-        echo "Retry with ./setup.sh, or force the compatibility backend with:"
-        echo "  ./launcher.sh --download-backend legacy-sldl ..."
+        echo "Retry with ./setup.sh after fixing network or permissions."
         exit 1
     fi
 }
@@ -270,28 +232,15 @@ run_seekspawner() {
     fi
 }
 
-resolve_download_backend() {
-    if [[ "$DOWNLOAD_BACKEND_OVERRIDE" != "auto" ]]; then
-        echo "$DOWNLOAD_BACKEND_OVERRIDE"
-        return
+run_fileshazzer() {
+    if [[ ${#FILESHAZZER_ARGS[@]} -gt 0 ]]; then
+        python fileshazzer.py "${FILESHAZZER_ARGS[@]}"
+    else
+        python fileshazzer.py
     fi
-
-    python - <<'PY'
-from reciprocity import load_reciprocity_config
-
-try:
-    config = load_reciprocity_config()
-except Exception:
-    print("legacy-sldl")
-else:
-    print("slskd" if config.backend == "slskd" else "legacy-sldl")
-PY
 }
 
 ensure_python_environment
-
-export DOTNET_ROOT=/usr/local/share/dotnet
-export PATH=$DOTNET_ROOT:$PATH
 
 ensure_recommended_slskd
 
@@ -304,10 +253,11 @@ fi
 check_runtime_tools_for_mode
 ingest_source_if_provided
 
-if [[ ${#FILESHAZZER_ARGS[@]} -gt 0 ]]; then
-    python fileshazzer.py "${FILESHAZZER_ARGS[@]}"
-else
-    python fileshazzer.py
+fileshazzer_status=0
+run_fileshazzer || fileshazzer_status=$?
+if [[ "$fileshazzer_status" -ne 0 ]]; then
+    echo "fileshazzer failed with exit code $fileshazzer_status before seekspawner could start."
+    exit "$fileshazzer_status"
 fi
 if [ "$MODE" = "identify" ]; then
     echo "Tracklist generation complete."

@@ -91,7 +91,6 @@ class DownloadBackendTests(unittest.TestCase):
             }
 
             config = ReciprocityConfig(
-                backend="slskd",
                 slskd=SlskdConfig(url="http://127.0.0.1:5030"),
             )
 
@@ -132,7 +131,6 @@ class DownloadBackendTests(unittest.TestCase):
         ]
 
         config = ReciprocityConfig(
-            backend="slskd",
             slskd=SlskdConfig(url="http://127.0.0.1:5030"),
         )
 
@@ -195,7 +193,6 @@ class DownloadBackendTests(unittest.TestCase):
             }
 
             config = ReciprocityConfig(
-                backend="slskd",
                 slskd=SlskdConfig(url="http://127.0.0.1:5030"),
             )
 

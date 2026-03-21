@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import time
 import unicodedata
 import urllib.parse
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional, Protocol, Sequence
+from typing import Callable, Optional, Sequence
 
 from reciprocity import ReciprocityAuditError, ReciprocityConfig, SlskdApiClient
 
@@ -142,51 +141,6 @@ class DownloadRunSummary:
     @property
     def total_downloaded_bytes(self) -> int:
         return sum(result.size_bytes for result in self.results if result.status == "downloaded")
-
-
-class DownloadBackend(Protocol):
-    name: str
-
-    def download_queries(self, queries: Sequence[TrackQuery]) -> DownloadRunSummary:
-        raise NotImplementedError
-
-
-class SldlDownloadBackend:
-    name = "legacy-sldl"
-
-    def __init__(
-        self,
-        executable: str,
-        queryfile_path: Path,
-        username: str,
-        password: str,
-        output_dir: Path,
-        env: dict[str, str],
-    ):
-        self.executable = executable
-        self.queryfile_path = Path(queryfile_path)
-        self.username = username
-        self.password = password
-        self.output_dir = output_dir
-        self.env = env
-
-    def download_queries(self, queries: Sequence[TrackQuery]) -> DownloadRunSummary:
-        del queries
-        command = [
-            "dotnet",
-            self.executable,
-            str(self.queryfile_path),
-            "--user",
-            self.username,
-            "--pass",
-            self.password,
-            "--input-type=list",
-            "--no-modify-share-count",
-            "--path",
-            str(self.output_dir),
-        ]
-        subprocess.run(command, env=self.env, check=True)
-        return DownloadRunSummary(backend=self.name)
 
 
 class SlskdDownloadBackend:

@@ -32,7 +32,7 @@ class SlskdConfig:
 
 @dataclass
 class ReciprocityConfig:
-    backend: str = "none"
+    backend: str = "slskd"
     slskd: SlskdConfig = field(default_factory=SlskdConfig)
 
 
@@ -98,7 +98,10 @@ def load_reciprocity_config(config_path: Path = RECIPROCITY_CONFIG_PATH) -> Reci
     if config_path.is_file():
         data = _load_json_file(config_path)
 
-    backend = _env("SETSEEK_RECIPROCITY_BACKEND") or str(data.get("backend", "none")).strip() or "none"
+    backend = _env("SETSEEK_RECIPROCITY_BACKEND") or str(data.get("backend", "slskd")).strip() or "slskd"
+    backend = backend.lower()
+    if backend != "slskd":
+        raise ReciprocityAuditError(f"Unsupported reciprocity backend '{backend}'. setseeker now only supports 'slskd'.")
     slskd_raw = data.get("slskd", {})
     if not isinstance(slskd_raw, dict):
         slskd_raw = {}
@@ -117,7 +120,7 @@ def load_reciprocity_config(config_path: Path = RECIPROCITY_CONFIG_PATH) -> Reci
         mirror_downloads_to_spoils=bool(slskd_raw.get("mirror_downloads_to_spoils", True)),
     )
 
-    return ReciprocityConfig(backend=backend.lower(), slskd=slskd)
+    return ReciprocityConfig(backend=backend, slskd=slskd)
 
 
 def _deep_get(data: dict[str, Any], path: list[str], default: Any = None) -> Any:
@@ -451,7 +454,7 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
         status.blocking_reasons.append("The configured Soulseek listen port is not accepting local connections.")
 
     if not status.upload_capable:
-        status.blocking_reasons.append("The configured backend is not currently upload-capable.")
+        status.blocking_reasons.append("The configured slskd instance is not currently upload-capable.")
 
     if not status.background_share_mode:
         status.blocking_reasons.append("No long-lived share-capable backend is currently online.")
@@ -481,9 +484,9 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
 
 
 def evaluate_reciprocity_status(config: ReciprocityConfig, expected_username: Optional[str]) -> ReciprocityStatus:
-    if config.backend != "slskd":
+    if not config.slskd.url:
         status = ReciprocityStatus(
-            backend=config.backend or "none",
+            backend="slskd",
             backend_configured=False,
             backend_reachable=False,
             expected_username=expected_username,
@@ -503,9 +506,9 @@ def evaluate_reciprocity_status(config: ReciprocityConfig, expected_username: Op
             download_count=0,
             overall_ok=False,
         )
-        status.blocking_reasons.append("No reciprocity backend is configured.")
+        status.blocking_reasons.append("slskd is not configured yet.")
         status.fix_steps.append(
-            f"Create {RECIPROCITY_CONFIG_PATH} with backend 'slskd' and a reachable slskd API endpoint."
+            f"Create {RECIPROCITY_CONFIG_PATH} with a reachable slskd API endpoint."
         )
         status.fix_steps.append("Configure slskd with shared directories and keep it running as the real share-capable client.")
         return status

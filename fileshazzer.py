@@ -179,7 +179,7 @@ async def main(segment_length):
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, f"{base_name}_tracklist_{segment_length}s.txt")
 
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write("Final Tracklist:\n")
             for track in tracks:
                 f.write(track + "\n")
@@ -193,6 +193,7 @@ async def main(segment_length):
     print("\nFinal Tracklist:")
     for track in tracks:
         print(track)
+    print(f"\nfileshazzer completed. Generated {len(generated_tracklists)} tracklist file(s).")
 
 # Run
 if __name__ == "__main__":

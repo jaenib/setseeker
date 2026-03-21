@@ -297,7 +297,6 @@ def write_reciprocity_config(metadata: dict):
     RECIPROCITY_CONFIG_PATH.write_text(
         json.dumps(
             {
-                "backend": "slskd",
                 "slskd": {
                     "url": metadata["web_url"],
                     "api_key": metadata["api_key"],
