@@ -32,13 +32,16 @@ What that script takes care of:
 
 You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild `slsk-batchdl` if needed.
 
-## Soulseek Etiquette Reminder
+## Reciprocity Gate
 
-`seekspawner.py` now prints a reminder at every start:
+Normal download mode now requires a real `slskd` backend that passes a reciprocity audit.
 
-- `setseeker` downloads from Soulseek, but does not share files by itself
-- New users should install a sharing client (Nicotine+ or slskd)
-- Keep shared folders online regularly and respect uploaders/queues
+- `setseeker` itself is still not the long-lived share-capable client
+- the audit is backed by live `slskd` state, not warning text
+- downloads are blocked by default when reciprocity is unhealthy
+- `slsk-batchdl` is run with `--no-modify-share-count` so it does not advertise fake share counts
+
+See [docs/reciprocity_audit.md](docs/reciprocity_audit.md) and [docs/slskd_reciprocity_setup.md](docs/slskd_reciprocity_setup.md).
 
 ## Soulseek Login Flow
 
@@ -76,7 +79,7 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
 
 3. Optional helper modes:
 
-   - **Environment doctor (recommended for troubleshooting)**
+   - **Environment + reciprocity doctor**
 
      ```
      ./launcher.sh --doctor
@@ -94,12 +97,34 @@ You can rerun `setup.sh` any time; it will reuse what already exists, offer to r
      ./launcher.sh --all-tracklists
      ```
 
+   - **Unsafe override for development/testing**
+
+     ```
+     ./launcher.sh --unsafe-disable-reciprocity-gate "<source>"
+     ```
+
 4. Advanced/manual mode (if you want to run scripts yourself):
 
    - `python3.11 ingest.py --source "<source>"` to only download/import audio into `sets/`
    - `python3.11 fileshazzer.py` for only the Shazam/tracklist stage
    - `python3.11 seekspawner.py` for only the Soulseek download stage
+   - `python3.11 seekspawner.py --doctor` for reciprocity doctor output
    - `python3.11 seekspawner.py --all-tracklists` to include all historical tracklists (legacy behavior)
+   - `python3.11 seekspawner.py --unsafe-disable-reciprocity-gate` to bypass blocking for development/testing only
+
+## slskd Setup
+
+`setseeker` looks for `user/reciprocity_config.json`.
+
+Start from [reciprocity_config.example.json](reciprocity_config.example.json), then point it at your `slskd` instance.
+
+The configured `slskd` backend should:
+
+- use the same Soulseek username as `setseeker`
+- have at least one shared directory configured
+- complete a healthy share scan
+- report nonzero shared folders and files
+- stay online as the real share-capable client
 
 `seekspawner.py` logs anything it had to skip to `logs/skipped_queries.log`, and downloads land in `spoils/`.
 

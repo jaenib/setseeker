@@ -1,0 +1,10 @@
+{
+  "backend": "slskd",
+  "slskd": {
+    "url": "http://127.0.0.1:5030",
+    "api_key": "replace-with-your-slskd-api-key",
+    "username": "",
+    "password": "",
+    "require_same_username": true
+  }
+}

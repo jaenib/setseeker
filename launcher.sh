@@ -21,9 +21,11 @@ source:
   - Local folder containing audio files
 
 options:
-  --doctor, --check          Validate environment and print diagnostics
+  --doctor, --check          Validate environment and print reciprocity diagnostics
   --identify-only            Ingest + Shazam tracklist only (skip Soulseek download)
   --all-tracklists           Query all historical tracklists (legacy behavior)
+  --unsafe-disable-reciprocity-gate
+                            Bypass reciprocity blocking for development/testing only
   --source, -s <source>      Explicit source (equivalent to positional source)
   -h, --help                 Show this help
 EOF
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --all-tracklists)
             SEEKSPAWNER_ARGS+=("--all-tracklists")
+            shift
+            ;;
+        --unsafe-disable-reciprocity-gate)
+            SEEKSPAWNER_ARGS+=("--unsafe-disable-reciprocity-gate")
             shift
             ;;
         --source|-s)
@@ -215,8 +221,13 @@ doctor_report() {
 }
 
 run_seekspawner() {
-    if [[ ${#SEEKSPAWNER_ARGS[@]} -gt 0 ]]; then
+    local extra_args=("$@")
+    if [[ ${#SEEKSPAWNER_ARGS[@]} -gt 0 && ${#extra_args[@]} -gt 0 ]]; then
+        python seekspawner.py "${SEEKSPAWNER_ARGS[@]}" "${extra_args[@]}"
+    elif [[ ${#SEEKSPAWNER_ARGS[@]} -gt 0 ]]; then
         python seekspawner.py "${SEEKSPAWNER_ARGS[@]}"
+    elif [[ ${#extra_args[@]} -gt 0 ]]; then
+        python seekspawner.py "${extra_args[@]}"
     else
         python seekspawner.py
     fi
@@ -229,6 +240,7 @@ export PATH=$DOTNET_ROOT:$PATH
 
 if [ "$MODE" = "doctor" ]; then
     doctor_report
+    run_seekspawner --doctor
     exit 0
 fi
 

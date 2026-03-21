@@ -9,6 +9,8 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
+from reciprocity import ReciprocityAuditError, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
+
 try:
     from cryptography.fernet import Fernet
 except ModuleNotFoundError:
@@ -102,7 +104,7 @@ def prompt_for_credentials():
     return username, password, "interactive prompt"
 
 
-def resolve_credentials():
+def resolve_credentials(allow_prompt=True):
     if SLSK_USER and SLSK_PW:
         return SLSK_USER, SLSK_PW, "script settings"
 
@@ -125,6 +127,8 @@ def resolve_credentials():
         except Exception as e:
             print(f"Couldn't decrypt credentials from {candidate_dir}: {e}")
 
+    if not allow_prompt:
+        return "", "", ""
     print("No usable saved Soulseek credentials found.")
     return prompt_for_credentials()
 
@@ -163,14 +167,30 @@ def print_download_summary(spoils_before, spoils_after):
     print(f"Downloaded {downloaded_tracks} tracks ({format_megabytes(downloaded_bytes)} MB).")
 
 
-def print_soulseek_etiquette_reminder():
+def get_expected_username_for_reciprocity():
+    username, _, _ = resolve_credentials(allow_prompt=False)
+    return username or None
+
+
+def print_reciprocity_pass(status):
+    listen_state = "reachable locally" if status.listening_port_ok else "reachability unverified"
     print(
-        "\nSoulseek etiquette reminder\n"
-        "- setseeker downloads via slsk-batchdl but does not share files by itself.\n"
-        "- If you are new to Soulseek: install a sharing client (Nicotine+ or slskd).\n"
-        "- Configure shared folders there and keep them online regularly.\n"
-        "- Respect uploaders: avoid queue-spam, keep requests reasonable, and share back."
+        "Reciprocity gate passed: "
+        f"{status.shared_directory_roots} share roots, "
+        f"{status.shared_folder_count} folders, "
+        f"{status.shared_file_count} files, "
+        f"listen port {status.listening_port or 'unknown'} {listen_state}."
     )
+
+
+def run_reciprocity_doctor(expected_username):
+    try:
+        config = load_reciprocity_config()
+        status = evaluate_reciprocity_status(config, expected_username=expected_username)
+    except ReciprocityAuditError as exc:
+        status = config_error_status(str(exc), expected_username=expected_username)
+    print(format_reciprocity_doctor(status))
+    return status
 
 
 def is_queryfied(artist, title):
@@ -265,13 +285,22 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH, use_last
         print("Only latest-run tracklists were queried to reduce duplicate re-checks.")
 
 
-def sendseek():
+def sendseek(args):
     print("Seeking souls...")
-    print_soulseek_etiquette_reminder()
 
     global SLSK_USER, SLSK_PW
     SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
     print(f"Accessing Soulseek as {SLSK_USER} ({cred_source})")
+
+    reciprocity_status = run_reciprocity_doctor(expected_username=SLSK_USER)
+    if not reciprocity_status.overall_ok:
+        if args.unsafe_disable_reciprocity_gate:
+            print("UNSAFE MODE: reciprocity gate disabled by --unsafe-disable-reciprocity-gate")
+        else:
+            print("Download blocked by reciprocity gate.")
+            raise SystemExit(2)
+    else:
+        print_reciprocity_pass(reciprocity_status)
 
     env = os.environ.copy()
     env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
@@ -286,6 +315,7 @@ def sendseek():
         "--pass",
         SLSK_PW,
         "--input-type=list",
+        "--no-modify-share-count",
         "--path",
         "spoils",
     ]
@@ -306,6 +336,16 @@ def parse_args():
         description="Convert tracklists into sldl queries and download from Soulseek.",
     )
     parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Print reciprocity audit results and exit.",
+    )
+    parser.add_argument(
+        "--unsafe-disable-reciprocity-gate",
+        action="store_true",
+        help="Bypass the reciprocity gate for development/testing only.",
+    )
+    parser.add_argument(
         "--all-tracklists",
         action="store_true",
         help="Query every tracklist under tracklists/ (legacy behavior).",
@@ -315,6 +355,10 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+
+    if args.doctor:
+        run_reciprocity_doctor(expected_username=get_expected_username_for_reciprocity())
+        sys.exit(0)
 
     expected_venv = os.path.abspath(".venv")
     actual_venv = os.environ.get("VIRTUAL_ENV", "")
@@ -329,4 +373,4 @@ if __name__ == "__main__":
         QUERYFILE_PATH,
         use_last_run_only=not args.all_tracklists,
     )
-    sendseek()
+    sendseek(args)
