@@ -10,7 +10,7 @@
 - Optional: [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download) only if you want the legacy `slsk-batchdl` fallback
 - `git` (only needed if you want setup to clone/build the optional legacy backend)
 
-`setup.sh` handles the Python environment and folders. It only builds `slsk-batchdl` if `.NET` is already installed.
+`setup.sh` handles the Python environment and folders. It also bootstraps a repo-local `slskd` instance for the recommended mode. It only builds `slsk-batchdl` if `.NET` is already installed.
 
 ## Setup
 
@@ -25,13 +25,15 @@ What that script takes care of:
 
 - Creates a fresh virtual environment at `.venv` and installs `requirements.txt`
 - Checks for `ffmpeg`; will try to install it if the binary isn't found
+- Downloads and bootstraps a repo-local `slskd` if needed, using your stored Soulseek credentials
+- Creates a local `slskd` app/config under `user/slskd/`
 - If `.NET` is already installed, clones and builds the optional legacy `slsk-batchdl` backend
 - Sets up the working folders: `sets`, `tracklists`, `spoils`, `user`, `logs`, `tmp/segments`, `tmp/queries`
 - Uses one credential location: `user/slsk_cred.json` + `user/slsk.key`
 - If old credentials exist in `../user/`, offers to import them so you don't lose your previous setup
 - Supports non-interactive setup with `SLSK_USERNAME` and `SLSK_PASSWORD` if you prefer
 
-You can rerun `setup.sh` any time; it will reuse what already exists, offer to rotate credentials, and rebuild the optional legacy backend if available.
+You can rerun `setup.sh` any time; it will reuse what already exists, repair the local `slskd` setup if needed, offer to rotate credentials, and rebuild the optional legacy backend if available.
 
 ## Reciprocity Gate
 
@@ -42,6 +44,7 @@ Normal download mode now requires a real `slskd` backend that passes a reciproci
 - downloads are blocked by default when reciprocity is unhealthy
 - normal search/download execution also goes through `slskd`
 - the old `slsk-batchdl` path is legacy-only and still runs with `--no-modify-share-count`
+- if no local `slskd` is present yet, `setup.sh` and `launcher.sh` will bootstrap one automatically in `user/slskd/`
 
 See [docs/reciprocity_audit.md](docs/reciprocity_audit.md) and [docs/slskd_reciprocity_setup.md](docs/slskd_reciprocity_setup.md).
 
@@ -122,6 +125,7 @@ See [docs/reciprocity_audit.md](docs/reciprocity_audit.md) and [docs/slskd_recip
    - `python3.11 seekspawner.py --download-backend slskd`
    - `python3.11 seekspawner.py --download-backend legacy-sldl`
    - `python3.11 seekspawner.py --unsafe-disable-reciprocity-gate` to bypass blocking for development/testing only
+   - `python3.11 slskd_manager.py status` to inspect the repo-local `slskd` bootstrap state
 
 ## slskd Setup
 
@@ -137,6 +141,13 @@ The configured `slskd` backend should:
 - report nonzero shared folders and files
 - stay online as the real share-capable client
 - expose a downloads directory on the same machine if you want completed files mirrored into `spoils/`
+
+By default, the automatic bootstrap creates a repo-local `slskd` config that:
+
+- runs the web/API on `127.0.0.1`
+- downloads into `spoils/`
+- uses `tmp/slskd-incomplete/` for partial files
+- shares `spoils/` unless you choose another folder during setup
 
 Normal mode searches and enqueues downloads through `slskd`. If `slskd` runs locally and its downloads directory is readable, `setseeker` mirrors completed files into `spoils/`. If not, the files stay in the daemon's own downloads directory and `setseeker` tells you that explicitly.
 

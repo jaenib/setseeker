@@ -236,6 +236,27 @@ doctor_report() {
     echo "- download backend: $(resolve_download_backend)"
 }
 
+ensure_recommended_slskd() {
+    if [[ "$MODE" == "identify" ]]; then
+        return
+    fi
+    if [[ "$DOWNLOAD_BACKEND_OVERRIDE" == "legacy-sldl" ]]; then
+        return
+    fi
+
+    local bootstrap_args=("slskd_manager.py" "ensure")
+    if [[ ! -t 0 ]]; then
+        bootstrap_args+=("--non-interactive")
+    fi
+
+    if ! python "${bootstrap_args[@]}"; then
+        echo "Failed to prepare the recommended local slskd backend."
+        echo "Retry with ./setup.sh, or force the compatibility backend with:"
+        echo "  ./launcher.sh --download-backend legacy-sldl ..."
+        exit 1
+    fi
+}
+
 run_seekspawner() {
     local extra_args=("$@")
     if [[ ${#SEEKSPAWNER_ARGS[@]} -gt 0 && ${#extra_args[@]} -gt 0 ]]; then
@@ -271,6 +292,8 @@ ensure_python_environment
 
 export DOTNET_ROOT=/usr/local/share/dotnet
 export PATH=$DOTNET_ROOT:$PATH
+
+ensure_recommended_slskd
 
 if [ "$MODE" = "doctor" ]; then
     doctor_report

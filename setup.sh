@@ -146,10 +146,18 @@ else
     fi
 fi
 
+echo "Preparing a local slskd backend for the recommended reciprocity-backed mode..."
+if python slskd_manager.py ensure; then
+    echo "Local slskd is ready."
+else
+    echo "Automatic slskd setup did not complete."
+    echo "You can rerun ./setup.sh after fixing network/permissions, or use:"
+    echo "  ./launcher.sh --download-backend legacy-sldl ..."
+fi
+
 echo "setseek setup success"
 echo "next steps:"
-echo "  1. configure slskd and user/reciprocity_config.json"
-echo "  2. run ./launcher.sh --doctor"
-echo "  3. then run ./launcher.sh '<youtube/soundcloud url or local file>'"
+echo "  1. run ./launcher.sh --doctor"
+echo "  2. then run ./launcher.sh '<youtube/soundcloud url or local file>'"
 #echo "Always activate the virtual environment with:"
 #echo "   source setseek_venv/bin/activate"

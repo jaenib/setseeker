@@ -10,6 +10,7 @@
 - Normal mode now uses `slskd` as both:
   - the reciprocity source of truth
   - the active search/download backend
+- The repo can now bootstrap a local `slskd` instance automatically when it is missing.
 - `slsk-batchdl` remains available only as an explicit legacy fallback backend.
 
 ## What The Current Downloader Actually Does

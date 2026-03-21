@@ -7,6 +7,20 @@ That daemon is used for both:
 - reciprocity auditing
 - normal search/download execution
 
+## Automatic Bootstrap
+
+On a normal local install, `setup.sh` and `launcher.sh` now try to bootstrap a repo-local `slskd` automatically.
+
+The bootstrap will:
+
+- install a local `slskd` binary into `user/slskd/install/` if no `slskd` executable is available
+- create a local app/config in `user/slskd/app/`
+- reuse the Soulseek credentials already stored in `user/`
+- write `user/reciprocity_config.json`
+- start the daemon locally and keep the web/API bound to `127.0.0.1`
+
+The default explicit share/download folder for that local bootstrap is `spoils/`.
+
 ## Minimum Setup
 
 1. Install and run `slskd`.
@@ -27,6 +41,8 @@ Recommended fields:
 - `slskd.api_key`: a read-only or administrator API key
 - `slskd.require_same_username`: keep this `true`
 - `slskd.mirror_downloads_to_spoils`: keep this `true` if `slskd` is local and you want completed files mirrored into `spoils/`
+
+If you are using the repo-local bootstrap, these files are created for you automatically.
 
 ## What The Gate Checks
 
