@@ -2,6 +2,11 @@
 
 `setseeker` now expects a real `slskd` instance for normal download mode.
 
+That daemon is used for both:
+
+- reciprocity auditing
+- normal search/download execution
+
 ## Minimum Setup
 
 1. Install and run `slskd`.
@@ -21,6 +26,7 @@ Recommended fields:
 - `slskd.url`: the base web/API URL, for example `http://127.0.0.1:5030`
 - `slskd.api_key`: a read-only or administrator API key
 - `slskd.require_same_username`: keep this `true`
+- `slskd.mirror_downloads_to_spoils`: keep this `true` if `slskd` is local and you want completed files mirrored into `spoils/`
 
 ## What The Gate Checks
 
@@ -46,6 +52,8 @@ The reciprocity section reports:
 - exact blocking reasons
 - exact remediation steps
 
+Normal runs also print which download backend is active.
+
 ## Unsafe Override
 
 Normal downloads are blocked when reciprocity is unhealthy.
@@ -57,3 +65,13 @@ For development/testing only:
 ```
 
 This mode is intentionally noisy and not presented as healthy operation.
+
+## Legacy Backend
+
+`setseeker` still contains an explicit fallback backend for `slsk-batchdl`:
+
+```bash
+./launcher.sh --download-backend legacy-sldl "<source>"
+```
+
+That path is compatibility-only. It is not the recommended or default mode.

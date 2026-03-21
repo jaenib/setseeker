@@ -8,6 +8,7 @@ MODE="full"
 SOURCE=""
 FILESHAZZER_ARGS=()
 SEEKSPAWNER_ARGS=()
+DOWNLOAD_BACKEND_OVERRIDE="auto"
 
 print_help() {
     cat <<'EOF'
@@ -24,6 +25,7 @@ options:
   --doctor, --check          Validate environment and print reciprocity diagnostics
   --identify-only            Ingest + Shazam tracklist only (skip Soulseek download)
   --all-tracklists           Query all historical tracklists (legacy behavior)
+  --download-backend <name>  Choose auto, slskd, or legacy-sldl
   --unsafe-disable-reciprocity-gate
                             Bypass reciprocity blocking for development/testing only
   --source, -s <source>      Explicit source (equivalent to positional source)
@@ -48,6 +50,15 @@ while [[ $# -gt 0 ]]; do
         --unsafe-disable-reciprocity-gate)
             SEEKSPAWNER_ARGS+=("--unsafe-disable-reciprocity-gate")
             shift
+            ;;
+        --download-backend)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for $1"
+                exit 1
+            fi
+            DOWNLOAD_BACKEND_OVERRIDE="$2"
+            SEEKSPAWNER_ARGS+=("--download-backend" "$2")
+            shift 2
             ;;
         --source|-s)
             if [[ $# -lt 2 ]]; then
@@ -184,17 +195,21 @@ check_runtime_tools_for_mode() {
         exit 1
     fi
 
+    local effective_backend
+    effective_backend="$(resolve_download_backend)"
     if [ "$MODE" != "identify" ]; then
-        if ! command -v dotnet &> /dev/null; then
-            echo ".NET SDK (dotnet) is missing."
-            echo "Run ./setup.sh to install/build slsk-batchdl."
-            exit 1
-        fi
+        if [ "$effective_backend" = "legacy-sldl" ]; then
+            if ! command -v dotnet &> /dev/null; then
+                echo ".NET SDK (dotnet) is missing."
+                echo "Install .NET 6 only if you want the legacy-sldl backend, or switch to slskd."
+                exit 1
+            fi
 
-        if [ ! -f "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll" ]; then
-            echo "slsk-batchdl is not built yet."
-            echo "Run ./setup.sh once, then rerun ./launcher.sh."
-            exit 1
+            if [ ! -f "slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll" ]; then
+                echo "slsk-batchdl is not built yet."
+                echo "Run ./setup.sh once to build the legacy backend, or switch to slskd."
+                exit 1
+            fi
         fi
     fi
 }
@@ -218,6 +233,7 @@ doctor_report() {
     else
         echo "- yt-dlp: not on PATH (launcher uses Python yt-dlp package)"
     fi
+    echo "- download backend: $(resolve_download_backend)"
 }
 
 run_seekspawner() {
@@ -231,6 +247,24 @@ run_seekspawner() {
     else
         python seekspawner.py
     fi
+}
+
+resolve_download_backend() {
+    if [[ "$DOWNLOAD_BACKEND_OVERRIDE" != "auto" ]]; then
+        echo "$DOWNLOAD_BACKEND_OVERRIDE"
+        return
+    fi
+
+    python - <<'PY'
+from reciprocity import load_reciprocity_config
+
+try:
+    config = load_reciprocity_config()
+except Exception:
+    print("legacy-sldl")
+else:
+    print("slskd" if config.backend == "slskd" else "legacy-sldl")
+PY
 }
 
 ensure_python_environment

@@ -5,6 +5,12 @@
     "api_key": "replace-with-your-slskd-api-key",
     "username": "",
     "password": "",
-    "require_same_username": true
+    "require_same_username": true,
+    "search_timeout_seconds": 15,
+    "response_limit": 100,
+    "file_limit": 10000,
+    "poll_interval_seconds": 1.0,
+    "transfer_timeout_seconds": 1800,
+    "mirror_downloads_to_spoils": true
   }
 }

@@ -22,6 +22,12 @@ class SlskdConfig:
     username: str = ""
     password: str = ""
     require_same_username: bool = True
+    search_timeout_seconds: int = 15
+    response_limit: int = 100
+    file_limit: int = 10000
+    poll_interval_seconds: float = 1.0
+    transfer_timeout_seconds: int = 1800
+    mirror_downloads_to_spoils: bool = True
 
 
 @dataclass
@@ -103,6 +109,12 @@ def load_reciprocity_config(config_path: Path = RECIPROCITY_CONFIG_PATH) -> Reci
         username=_env("SETSEEK_SLSKD_USERNAME") or str(slskd_raw.get("username", "")).strip(),
         password=_env("SETSEEK_SLSKD_PASSWORD") or str(slskd_raw.get("password", "")).strip(),
         require_same_username=bool(slskd_raw.get("require_same_username", True)),
+        search_timeout_seconds=_safe_int(slskd_raw.get("search_timeout_seconds", 15), 15),
+        response_limit=_safe_int(slskd_raw.get("response_limit", 100), 100),
+        file_limit=_safe_int(slskd_raw.get("file_limit", 10000), 10000),
+        poll_interval_seconds=_safe_float(slskd_raw.get("poll_interval_seconds", 1.0), 1.0),
+        transfer_timeout_seconds=_safe_int(slskd_raw.get("transfer_timeout_seconds", 1800), 1800),
+        mirror_downloads_to_spoils=bool(slskd_raw.get("mirror_downloads_to_spoils", True)),
     )
 
     return ReciprocityConfig(backend=backend.lower(), slskd=slskd)
@@ -124,6 +136,13 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _bool_label(value: Optional[bool]) -> str:
     if value is True:
         return "OK"
@@ -134,6 +153,8 @@ def _bool_label(value: Optional[bool]) -> str:
 
 def _flatten_transfer_groups(groups: Any) -> list[dict[str, Any]]:
     flattened: list[dict[str, Any]] = []
+    if isinstance(groups, dict):
+        groups = [groups]
     if not isinstance(groups, list):
         return flattened
 
@@ -206,15 +227,21 @@ class SlskdApiClient:
             headers["Authorization"] = f"Basic {token}"
         return headers
 
-    def _get_json(self, path: str) -> Any:
+    def _request_json(self, method: str, path: str, payload: Any = None, allow_no_content: bool = False) -> Any:
+        data = None
+        headers = self._headers()
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
             f"{self.base_url}{path}",
-            headers=self._headers(),
-            method="GET",
+            headers=headers,
+            method=method,
+            data=data,
         )
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
-                payload = response.read().decode("utf-8")
+                response_payload = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             if exc.code in {401, 403}:
                 raise ReciprocityAuditError(
@@ -224,20 +251,100 @@ class SlskdApiClient:
         except urllib.error.URLError as exc:
             raise ReciprocityAuditError(f"could not reach slskd at {self.base_url}: {exc.reason}") from exc
 
+        if allow_no_content and response_payload == "":
+            return None
         try:
-            return json.loads(payload)
+            return json.loads(response_payload)
         except json.JSONDecodeError as exc:
+            if allow_no_content and response_payload == "":
+                return None
             raise ReciprocityAuditError(f"slskd returned invalid JSON for {path}") from exc
 
-    def snapshot(self) -> SlskdSnapshot:
-        state = self._get_json("/api/v0/application")
-        options = self._get_json("/api/v0/options")
-        shares = self._get_json("/api/v0/shares")
-        uploads = _flatten_transfer_groups(self._get_json("/api/v0/transfers/uploads?includeRemoved=true"))
-        downloads = _flatten_transfer_groups(self._get_json("/api/v0/transfers/downloads?includeRemoved=true"))
+    def _get_json(self, path: str) -> Any:
+        return self._request_json("GET", path)
 
-        if not isinstance(state, dict) or not isinstance(options, dict) or not isinstance(shares, dict):
-            raise ReciprocityAuditError("slskd API returned an unexpected response shape")
+    def _delete_json(self, path: str) -> Any:
+        return self._request_json("DELETE", path, allow_no_content=True)
+
+    def _post_json(self, path: str, payload: Any) -> Any:
+        return self._request_json("POST", path, payload=payload)
+
+    def get_application(self) -> dict[str, Any]:
+        data = self._get_json("/api/v0/application")
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd application endpoint returned an unexpected response shape")
+        return data
+
+    def get_options(self) -> dict[str, Any]:
+        data = self._get_json("/api/v0/options")
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd options endpoint returned an unexpected response shape")
+        return data
+
+    def get_shares(self) -> dict[str, Any]:
+        data = self._get_json("/api/v0/shares")
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd shares endpoint returned an unexpected response shape")
+        return data
+
+    def list_downloads(self, include_removed: bool = False, username: Optional[str] = None) -> list[dict[str, Any]]:
+        if username:
+            path = f"/api/v0/transfers/downloads/{urllib.parse.quote(username, safe='')}"
+        else:
+            path = "/api/v0/transfers/downloads"
+        separator = "&" if "?" in path else "?"
+        data = self._get_json(f"{path}{separator}includeRemoved={'true' if include_removed else 'false'}")
+        return _flatten_transfer_groups(data)
+
+    def create_search(
+        self,
+        search_id,
+        search_text: str,
+        search_timeout: int,
+        response_limit: int,
+        file_limit: int,
+    ) -> dict[str, Any]:
+        payload = {
+            "id": str(search_id),
+            "searchText": search_text,
+            "searchTimeout": search_timeout,
+            "responseLimit": response_limit,
+            "fileLimit": file_limit,
+        }
+        data = self._post_json("/api/v0/searches", payload)
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd search creation returned an unexpected response shape")
+        return data
+
+    def get_search(self, search_id, include_responses: bool = False) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v0/searches/{urllib.parse.quote(str(search_id), safe='')}?includeResponses={'true' if include_responses else 'false'}"
+        )
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd search status returned an unexpected response shape")
+        return data
+
+    def get_search_responses(self, search_id) -> list[dict[str, Any]]:
+        data = self._get_json(f"/api/v0/searches/{urllib.parse.quote(str(search_id), safe='')}/responses")
+        if not isinstance(data, list):
+            raise ReciprocityAuditError("slskd search responses returned an unexpected response shape")
+        return [response for response in data if isinstance(response, dict)]
+
+    def delete_search(self, search_id) -> None:
+        self._delete_json(f"/api/v0/searches/{urllib.parse.quote(str(search_id), safe='')}")
+
+    def enqueue_download(self, username: str, files: list[dict[str, Any]]) -> dict[str, Any]:
+        data = self._post_json(f"/api/v0/transfers/downloads/{urllib.parse.quote(username, safe='')}", files)
+        if not isinstance(data, dict):
+            raise ReciprocityAuditError("slskd enqueue returned an unexpected response shape")
+        return data
+
+    def snapshot(self) -> SlskdSnapshot:
+        state = self.get_application()
+        options = self.get_options()
+        shares = self.get_shares()
+        uploads = _flatten_transfer_groups(self._get_json("/api/v0/transfers/uploads?includeRemoved=true"))
+        downloads = self.list_downloads(include_removed=True)
 
         return SlskdSnapshot(
             base_url=self.base_url,

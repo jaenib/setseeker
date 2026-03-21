@@ -4,12 +4,12 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 from getpass import getpass
 from pathlib import Path
 
-from reciprocity import ReciprocityAuditError, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
+from download_backends import DownloadRunSummary, SldlDownloadBackend, SlskdDownloadBackend, TrackQuery
+from reciprocity import ReciprocityAuditError, ReciprocityConfig, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
 
 try:
     from cryptography.fernet import Fernet
@@ -183,12 +183,18 @@ def print_reciprocity_pass(status):
     )
 
 
-def run_reciprocity_doctor(expected_username):
+def load_reciprocity_status(expected_username):
     try:
         config = load_reciprocity_config()
         status = evaluate_reciprocity_status(config, expected_username=expected_username)
     except ReciprocityAuditError as exc:
+        config = ReciprocityConfig()
         status = config_error_status(str(exc), expected_username=expected_username)
+    return config, status
+
+
+def run_reciprocity_doctor(expected_username):
+    _, status = load_reciprocity_status(expected_username)
     print(format_reciprocity_doctor(status))
     return status
 
@@ -220,9 +226,9 @@ def list_tracklist_files(tracklist_dir, use_last_run_only=True):
     return txt_files
 
 
-def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH, use_last_run_only=True):
+def build_track_queries(tracklist_dir, use_last_run_only=True):
     seen = set()
-    queries = []
+    track_queries = []
     skipped = []
 
     txt_files = list_tracklist_files(tracklist_dir, use_last_run_only=use_last_run_only)
@@ -258,41 +264,85 @@ def querify_tracklists(tracklist_dir, output_query_file=QUERYFILE_PATH, use_last
                     key = (artist.lower(), title.lower(), format_type)
                     if key not in seen:
                         seen.add(key)
-
-                        if format_type == "mp3":
-                            query_line = f"\"artist={artist},title={title}\"  \"format=mp3\"  \"br >= 320\""
-                            queries.append(query_line)
-
-                        if format_type == "flac":
-                            query_line = f"\"artist={artist},title={title}\"  \"format=flac\""
-                            queries.append(query_line)
+                        track_queries.append(
+                            TrackQuery(
+                                artist=artist,
+                                title=title,
+                                format=format_type,
+                                min_bitrate=320 if format_type == "mp3" else 0,
+                                source_file=file_path,
+                                source_line=lineno,
+                                raw_line=original,
+                            )
+                        )
 
             else:
                 skipped.append(f"[{file_path}:{lineno}] NO HYPHEN or EMPTY -> {cleaned}")
-
-    with open(output_query_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(queries))
 
     if skipped:
         with open(SKIPPED_PATH, "w", encoding="utf-8") as f:
             f.write("\n".join(skipped))
         print(f"Skipped {len(skipped)} problematic lines. See {SKIPPED_PATH} for details.")
 
-    print(f"{len(queries)} filtered queries (list mode) ready at {output_query_file}")
+    print(f"{len(track_queries)} filtered track queries ready.")
     if not use_last_run_only:
         print("Note: --all-tracklists includes historical sets; 'already exist' messages are expected.")
     else:
         print("Only latest-run tracklists were queried to reduce duplicate re-checks.")
+    return track_queries
 
 
-def sendseek(args):
+def legacy_query_line(track_query):
+    base = f"\"artist={track_query.artist},title={track_query.title}\""
+    if track_query.format == "mp3":
+        return f'{base}  "format=mp3"  "br >= {track_query.min_bitrate}"'
+    return f'{base}  "format=flac"'
+
+
+def write_legacy_query_file(track_queries, output_query_file=QUERYFILE_PATH):
+    with open(output_query_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(legacy_query_line(track_query) for track_query in track_queries))
+    print(f"Wrote {len(track_queries)} legacy sldl queries to {output_query_file}")
+
+
+def select_download_backend(args, reciprocity_config):
+    if args.download_backend != "auto":
+        return args.download_backend
+    if reciprocity_config.backend == "slskd":
+        return "slskd"
+    return "legacy-sldl"
+
+
+def print_backend_summary(summary):
+    if summary.backend == "legacy-sldl":
+        print("Legacy sldl backend finished.")
+        return
+    print(
+        f"slskd backend summary: requested {summary.requested_count}, "
+        f"downloaded {summary.succeeded_count}, missed {summary.missed_count}, failed {summary.failed_count}."
+    )
+    if summary.mirrored_count:
+        print(f"Mirrored {summary.mirrored_count} completed file(s) into spoils/.")
+    if summary.mirror_failures:
+        print(
+            f"{summary.mirror_failures} completed file(s) stayed only in the slskd downloads directory. "
+            "Check slskd's configured downloads path if you expected them in spoils/."
+        )
+
+
+def sendseek(args, track_queries):
     print("Seeking souls...")
+
+    if not track_queries:
+        print("No valid track queries were produced from the current tracklists. Nothing to download.")
+        return
 
     global SLSK_USER, SLSK_PW
     SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
     print(f"Accessing Soulseek as {SLSK_USER} ({cred_source})")
 
-    reciprocity_status = run_reciprocity_doctor(expected_username=SLSK_USER)
+    reciprocity_config, reciprocity_status = load_reciprocity_status(expected_username=SLSK_USER)
+    print(format_reciprocity_doctor(reciprocity_status))
     if not reciprocity_status.overall_ok:
         if args.unsafe_disable_reciprocity_gate:
             print("UNSAFE MODE: reciprocity gate disabled by --unsafe-disable-reciprocity-gate")
@@ -302,29 +352,33 @@ def sendseek(args):
     else:
         print_reciprocity_pass(reciprocity_status)
 
-    env = os.environ.copy()
-    env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
-    env["PATH"] = f'{env["DOTNET_ROOT"]}:{env["PATH"]}'
+    backend_name = select_download_backend(args, reciprocity_config)
+    print(f"Download backend selected: {backend_name}")
 
-    command = [
-        "dotnet",
-        SLSKDL_EXECUTABLE,
-        QUERYFILE_PATH,
-        "--user",
-        SLSK_USER,
-        "--pass",
-        SLSK_PW,
-        "--input-type=list",
-        "--no-modify-share-count",
-        "--path",
-        "spoils",
-    ]
+    if backend_name == "slskd":
+        backend = SlskdDownloadBackend(reciprocity_config, output_dir=DOWNLOAD_DIR)
+    elif backend_name == "legacy-sldl":
+        write_legacy_query_file(track_queries, QUERYFILE_PATH)
+        env = os.environ.copy()
+        env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
+        env["PATH"] = f'{env["DOTNET_ROOT"]}:{env["PATH"]}'
+        backend = SldlDownloadBackend(
+            executable=SLSKDL_EXECUTABLE,
+            queryfile_path=Path(QUERYFILE_PATH),
+            username=SLSK_USER,
+            password=SLSK_PW,
+            output_dir=DOWNLOAD_DIR,
+            env=env,
+        )
+    else:
+        raise SystemExit(f"Unsupported download backend: {backend_name}")
 
     spoils_before = count_files_and_size(DOWNLOAD_DIR, audio_only=True)
     try:
-        subprocess.run(command, env=env, check=True)
+        summary = backend.download_queries(track_queries)
         print("Seek concluded")
-    except subprocess.CalledProcessError as e:
+        print_backend_summary(summary)
+    except Exception as e:
         print(f"Seek collapsed under {e}")
     finally:
         spoils_after = count_files_and_size(DOWNLOAD_DIR, audio_only=True)
@@ -333,7 +387,7 @@ def sendseek(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert tracklists into sldl queries and download from Soulseek.",
+        description="Convert tracklists into download queries and fetch them through the configured Soulseek backend.",
     )
     parser.add_argument(
         "--doctor",
@@ -344,6 +398,12 @@ def parse_args():
         "--unsafe-disable-reciprocity-gate",
         action="store_true",
         help="Bypass the reciprocity gate for development/testing only.",
+    )
+    parser.add_argument(
+        "--download-backend",
+        choices=("auto", "slskd", "legacy-sldl"),
+        default="auto",
+        help="Choose the download backend. Default: auto (prefer slskd when configured).",
     )
     parser.add_argument(
         "--all-tracklists",
@@ -368,9 +428,8 @@ if __name__ == "__main__":
 
     print("Seeker spawned")
 
-    querify_tracklists(
+    track_queries = build_track_queries(
         TRACKLIST_DIR,
-        QUERYFILE_PATH,
         use_last_run_only=not args.all_tracklists,
     )
-    sendseek(args)
+    sendseek(args, track_queries)

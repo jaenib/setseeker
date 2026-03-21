@@ -2,65 +2,60 @@
 
 ## What Is True Today
 
-- `setseeker` is a Python orchestration layer:
-  - `ingest.py` brings in source audio
+- `setseeker` is still a Python orchestration layer:
+  - `ingest.py` imports source audio
   - `fileshazzer.py` identifies tracks with Shazam
-  - `seekspawner.py` turns tracklists into Soulseek download queries
-- Soulseek download connectivity is delegated to upstream `slsk-batchdl`, invoked as:
-  - `dotnet slsk-batchdl/slsk-batchdl/bin/Release/net6.0/sldl.dll ...`
-- This repo does not implement its own Soulseek protocol client.
-- This repo does not currently use `slskd` or Nicotine+ as the active download backend.
+  - `seekspawner.py` builds typed track queries and routes them to a backend
+- This repo still does not implement its own Soulseek protocol client.
+- Normal mode now uses `slskd` as both:
+  - the reciprocity source of truth
+  - the active search/download backend
+- `slsk-batchdl` remains available only as an explicit legacy fallback backend.
 
 ## What The Current Downloader Actually Does
 
-- Searches and downloads from Soulseek through `slsk-batchdl`.
-- Opens a Soulseek client connection for the duration of the download session.
-- Uses a Soulseek listen port owned by `slsk-batchdl` / Soulseek.NET, not by Python code in this repo.
-- Exits when the download session ends; it does not remain online as a long-lived sharing client.
+- Runs a reciprocity audit against a configured `slskd` instance.
+- Blocks downloads by default unless that backend is minimally healthy.
+- Creates searches through `slskd`, chooses a candidate file, enqueues the download, and waits for transfer completion.
+- Reuses the same long-lived `slskd` daemon that can also advertise shares and serve uploads.
+- Mirrors completed files into `spoils/` only when `slskd` is local and its downloads directory is readable from this machine.
 
 ## What It Does Not Do By Itself
 
-- It does not configure or advertise real shared directories from this repo.
-- It does not serve uploads from a configured music library in any verifiable way.
-- It does not verify inbound reachability or browseability.
-- It does not track truthful upload/download reciprocity metrics for the user account.
-- It does not expose a stable share-capable daemon mode.
+- It still does not make `setseeker` itself a first-party long-lived Soulseek client.
+- It still does not verify external port forwarding or browseability from outside the host.
+- It still depends on `slskd` for truthful share serving, upload handling, and online presence.
+- It still does not force `slskd` configuration changes remotely; shared directories remain explicit user configuration.
 
-## Important Risk In The Current Stack
+## Important Risk In The Legacy Stack
 
 - Upstream `slsk-batchdl` logs in with a real Soulseek connection and, by default, calls `SetSharedCountsAsync(50, 1000)`.
-- That means a plain `sldl` session can advertise synthetic share counts unless `--no-modify-share-count` is passed.
-- `setseeker` now passes `--no-modify-share-count` so it no longer relies on fake share-count signaling.
-
-## Lowest-Risk Honest Path
-
-- Keep the existing set-identification pipeline.
-- Keep `slsk-batchdl` as the download executor for now.
-- Add a reciprocity gate backed by a real share-capable daemon: `slskd`.
-- Block downloads unless `slskd` proves that the user is configured in a minimally reciprocal way.
-
-This is the smallest step that is both technically credible and reviewable.
+- That can advertise synthetic share counts unless `--no-modify-share-count` is passed.
+- `setseeker` now avoids that in two ways:
+  - normal mode no longer uses `slsk-batchdl`
+  - the legacy fallback still passes `--no-modify-share-count`
 
 ## What Can Be Implemented Safely Now
 
 - A truthful reciprocity status object in Python.
 - A doctor command that audits a real `slskd` backend.
 - Download blocking unless the backend passes reciprocity checks.
-- Explicit unsafe override for development/testing.
-- Honest docs and config examples for `slskd` setup.
+- Normal search/download execution through `slskd`, not just reciprocity gating.
+- Explicit legacy fallback and explicit unsafe override.
 
-## What Requires A Larger Rewrite
+## What Still Requires A Larger Rewrite
 
 - Making `setseeker` itself a real long-lived share-capable Soulseek client.
-- Serving uploads directly from Python in this repo.
-- Verifying external reachability from inside the app without an external probe.
-- Replacing `slsk-batchdl` with a first-party Soulseek client implementation.
+- Verifying true external reachability from outside the local host.
+- Replacing `slskd` with a first-party protocol implementation.
+- Building richer, deterministic search ranking that can fully replace mature client behavior across edge cases.
 
 ## Recommended Path Forward
 
-1. Use `slskd` as the real reciprocity backend today.
-2. Keep the gate strict: no configured `slskd`, no downloads.
+1. Keep `slskd` as the standard backend for healthy operation.
+2. Treat `legacy-sldl` as compatibility-only, not normal mode.
 3. Keep public claims narrow:
    - `setseeker` requires a healthy `slskd` sharing backend for normal download mode.
-   - `setseeker` itself is not yet the share-capable client.
-4. If the `slskd` path proves stable, add a backend adapter seam and migrate download/search operations away from `slsk-batchdl` over time.
+   - `setseeker` now performs its own search/download work through that daemon.
+   - `setseeker` itself is still not the share-capable client.
+4. If the `slskd` path proves stable, remove the legacy backend entirely.

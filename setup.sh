@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Setting up your Soulseek track downloader..."
+echo "Setting up setseeker..."
 
 # 1. Select Python and create virtual environment
 PYTHON_BIN=""
@@ -79,30 +79,11 @@ if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] &
     fi
 fi
 
-# 4. Install .NET 6 SDK if missing
-dotnet_missing=false
-if ! command -v dotnet &> /dev/null; then
-    echo ".NET 6 SDK not found. Attempting to install..."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install --cask dotnet-sdk
-    elif command -v apt-get &> /dev/null; then
-        wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-        sudo dpkg -i packages-microsoft-prod.deb
-        rm packages-microsoft-prod.deb
-        sudo apt-get update
-        sudo apt-get install -y dotnet-sdk-6.0
-    else
-        echo "Please install .NET 6 SDK manually: https://dotnet.microsoft.com/en-us/download"
-    fi
-    if ! command -v dotnet &> /dev/null; then
-        echo ".NET 6 SDK still missing. Install it manually and re-run setup.sh."
-        dotnet_missing=true
-    fi
-else
-    echo ".NET SDK found"
-fi
-
-if [ "$dotnet_missing" = false ]; then
+# 4. Legacy sldl backend is optional; normal mode prefers slskd.
+dotnet_missing=true
+if command -v dotnet &> /dev/null; then
+    echo ".NET SDK found. Building optional legacy slsk-batchdl backend..."
+    dotnet_missing=false
     export DOTNET_ROOT=/usr/local/share/dotnet
     export PATH=$DOTNET_ROOT:$PATH
     echo "Setting up .NET environment variables DOTNET_ROOT and PATH..."
@@ -116,10 +97,11 @@ if [ "$dotnet_missing" = false ]; then
     fi
 
     # Build slsk-batchdl
-    echo "🔨 Building slsk-batchdl..."
+    echo "Building optional slsk-batchdl legacy backend..."
     (cd slsk-batchdl/slsk-batchdl && dotnet build -c Release)
 else
-    echo "Skipping slsk-batchdl build due to missing .NET."
+    echo "Skipping optional slsk-batchdl legacy backend (.NET SDK not found)."
+    echo "Normal setseeker downloads now run through slskd instead."
 fi
 
 # 5. Prompt to create Soulseek credentials file
@@ -164,11 +146,10 @@ else
     fi
 fi
 
-if [ "$dotnet_missing" = true ]; then
-    echo "!! slsk-batchdl not built. Install .NET 6 SDK and re-run setup.sh. !!"
-fi
-
 echo "setseek setup success"
-echo "continue by adding mp3 to folder: sets, or add soundcloud-urls to fileshazzer.py"
+echo "next steps:"
+echo "  1. configure slskd and user/reciprocity_config.json"
+echo "  2. run ./launcher.sh --doctor"
+echo "  3. then run ./launcher.sh '<youtube/soundcloud url or local file>'"
 #echo "Always activate the virtual environment with:"
 #echo "   source setseek_venv/bin/activate"
