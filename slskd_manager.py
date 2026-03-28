@@ -49,6 +49,14 @@ class SlskdBootstrapError(Exception):
 
 
 @dataclass
+class SlskdApiHealth:
+    configured: bool
+    authenticated: bool
+    service_up: bool
+    detail: str = ""
+
+
+@dataclass
 class SoulseekCredentials:
     username: str
     password: str
@@ -260,12 +268,14 @@ def bootstrap_config(non_interactive: bool, explicit_share_dir: Optional[str]) -
     web_username = "setseeker"
     web_password = secrets.token_urlsafe(18)
     api_key = secrets.token_urlsafe(32)
+    jwt_key = secrets.token_urlsafe(24)
 
     metadata = {
         "web_url": f"http://{DEFAULT_WEB_HOST}:{web_port}",
         "web_port": web_port,
         "listen_port": listen_port,
         "api_key": api_key,
+        "jwt_key": jwt_key,
         "web_username": web_username,
         "web_password": web_password,
         "share_dir": str(share_dir),
@@ -285,6 +295,7 @@ def bootstrap_config(non_interactive: bool, explicit_share_dir: Optional[str]) -
         web_username=web_username,
         web_password=web_password,
         api_key=api_key,
+        jwt_key=jwt_key,
     )
 
     LOCAL_SLSKD_CONFIG_PATH.write_text(yaml_text, encoding="utf-8")
@@ -332,6 +343,7 @@ def render_slskd_yaml(
     web_username: str,
     web_password: str,
     api_key: str,
+    jwt_key: str,
 ) -> str:
     return "\n".join(
         [
@@ -354,6 +366,10 @@ def render_slskd_yaml(
             "    disabled: false",
             f"    username: {yaml_quote(web_username)}",
             f"    password: {yaml_quote(web_password)}",
+            "    jwt:",
+            f"      key: {yaml_quote(jwt_key)}",
+            "      ttl: 604800000",
+            f"    api_key: {yaml_quote(api_key)}",
             "    api_keys:",
             "      setseeker:",
             f"        key: {yaml_quote(api_key)}",
@@ -374,24 +390,64 @@ def render_slskd_yaml(
     )
 
 
-def configured_api_reachable() -> bool:
-    if not RECIPROCITY_CONFIG_PATH.is_file():
+def _probe_slskd_web_service(base_url: str) -> bool:
+    normalized = base_url.rstrip("/")
+    if not normalized:
         return False
+    request = urllib.request.Request(f"{normalized}/api/v0/session/enabled", headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            response.read()
+        return True
+    except urllib.error.HTTPError as exc:
+        return exc.code in {200, 401, 403}
+    except Exception:
+        return False
+
+
+def configured_api_health() -> SlskdApiHealth:
+    if not RECIPROCITY_CONFIG_PATH.is_file():
+        return SlskdApiHealth(configured=False, authenticated=False, service_up=False, detail="user/reciprocity_config.json is missing")
+
+    base_url = ""
     try:
         config = json.loads(RECIPROCITY_CONFIG_PATH.read_text(encoding="utf-8"))
         slskd = config.get("slskd", {})
+        base_url = str(slskd.get("url", ""))
         client = SlskdApiClient(
             SlskdConfig(
-                url=str(slskd.get("url", "")),
+                url=base_url,
                 api_key=str(slskd.get("api_key", "")),
                 username=str(slskd.get("username", "")),
                 password=str(slskd.get("password", "")),
             )
         )
         client.get_application()
-        return True
-    except Exception:
-        return False
+        return SlskdApiHealth(configured=True, authenticated=True, service_up=True)
+    except Exception as exc:
+        return SlskdApiHealth(
+            configured=True,
+            authenticated=False,
+            service_up=_probe_slskd_web_service(base_url),
+            detail=str(exc),
+        )
+
+
+def configured_api_reachable() -> bool:
+    return configured_api_health().authenticated
+
+
+def _bootstrap_failure_message(health: SlskdApiHealth) -> str:
+    if health.service_up:
+        detail = health.detail or "slskd accepted HTTP connections, but setseeker could not authenticate to the API."
+        return (
+            "slskd is running, but setseeker could not authenticate to its API. "
+            f"{detail} "
+            f"If this local config was bootstrapped by an older setseeker version, update {LOCAL_SLSKD_CONFIG_PATH} so "
+            "web.authentication includes api_key (and jwt for web login), then restart slskd."
+        )
+    detail = health.detail or "the daemon never opened a usable API endpoint"
+    return f"slskd did not become reachable. {detail}. Check {LOCAL_SLSKD_LOG_PATH} for details."
 
 
 def read_pid() -> Optional[int]:
@@ -432,10 +488,11 @@ def start_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) 
     if pid and process_is_running(pid):
         deadline = time.time() + 20
         while time.time() < deadline:
-            if configured_api_reachable():
+            health = configured_api_health()
+            if health.authenticated:
                 return metadata
             time.sleep(1)
-        raise SlskdBootstrapError("slskd process exists but its API never became reachable")
+        raise SlskdBootstrapError(_bootstrap_failure_message(configured_api_health()))
 
     with open(LOCAL_SLSKD_LOG_PATH, "ab") as log_file:
         process = subprocess.Popen(
@@ -458,13 +515,12 @@ def start_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) 
 
     deadline = time.time() + 30
     while time.time() < deadline:
-        if configured_api_reachable():
+        health = configured_api_health()
+        if health.authenticated:
             return metadata
         time.sleep(1)
 
-    raise SlskdBootstrapError(
-        f"slskd did not become reachable within 30 seconds. Check {LOCAL_SLSKD_LOG_PATH} for details."
-    )
+    raise SlskdBootstrapError(_bootstrap_failure_message(configured_api_health()))
 
 
 def ensure_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) -> dict:
