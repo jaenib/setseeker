@@ -44,7 +44,7 @@ It checks:
 - at least one shared directory is configured
 - share scanning completed successfully
 - shared folder count is nonzero
-- shared file count is nonzero
+- shared file count is nonzero, unless the download destination is already a configured shared path and this is the first download session
 - the Soulseek listen port is configured and, when `slskd` is local, accepting local TCP connections
 - the daemon is logged in and upload-capable
 - the daemon is online as the long-lived share-capable backend
@@ -141,7 +141,7 @@ The configured `slskd` instance should:
 
 - use the same Soulseek username as `setseeker`
 - have one or more explicit shared directories
-- finish a healthy share scan with nonzero files/folders
+- finish a healthy share scan; zero files still warns, but the first download session is allowed when the downloads directory is already shared
 - stay online as the actual share-capable client
 - expose a readable downloads directory if you want files mirrored into `spoils/`
 

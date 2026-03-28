@@ -57,6 +57,7 @@ class ReciprocityStatus:
     upload_count: int
     download_count: int
     overall_ok: bool
+    empty_share_grace_active: bool = False
     blocking_reasons: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     fix_steps: list[str] = field(default_factory=list)
@@ -212,6 +213,73 @@ def _probe_local_port(port: int, listen_ip: str) -> Optional[bool]:
             return True
     except OSError:
         return False
+
+
+def _normalize_path_string(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text.replace("\\", "/").rstrip("/")
+
+
+def _extract_configured_share_paths(snapshot: SlskdSnapshot) -> list[str]:
+    configured_paths: list[str] = []
+
+    option_paths = _deep_get(snapshot.options, ["shares", "directories"], [])
+    if isinstance(option_paths, list):
+        configured_paths.extend(str(path).strip() for path in option_paths if str(path).strip())
+    elif isinstance(option_paths, str) and option_paths.strip():
+        configured_paths.append(option_paths.strip())
+
+    for host_shares in snapshot.shares.values():
+        if not isinstance(host_shares, list):
+            continue
+        for share in host_shares:
+            if not isinstance(share, dict):
+                continue
+            for key in ("directory", "path", "shareDirectory", "sharePath"):
+                value = share.get(key)
+                if isinstance(value, str) and value.strip():
+                    configured_paths.append(value.strip())
+                    break
+
+    return _unique_keep_order(configured_paths)
+
+
+def _count_configured_share_roots(snapshot: SlskdSnapshot) -> int:
+    configured_paths = _extract_configured_share_paths(snapshot)
+    if configured_paths:
+        return len(configured_paths)
+
+    configured_shares = 0
+    for host_shares in snapshot.shares.values():
+        if isinstance(host_shares, list):
+            configured_shares += sum(1 for item in host_shares if isinstance(item, dict))
+
+    return configured_shares
+
+
+def _extract_download_directory(snapshot: SlskdSnapshot) -> Optional[str]:
+    candidates = (
+        _deep_get(snapshot.options, ["directories", "downloads"], ""),
+        _deep_get(snapshot.options, ["directories", "downloadsDirectory"], ""),
+        _deep_get(snapshot.options, ["directories", "download"], ""),
+    )
+
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+
+    return None
+
+
+def _download_destination_is_shared(snapshot: SlskdSnapshot) -> bool:
+    download_directory = _normalize_path_string(_extract_download_directory(snapshot))
+    if not download_directory:
+        return False
+
+    shared_paths = _extract_configured_share_paths(snapshot)
+    return any(_normalize_path_string(shared_path) == download_directory for shared_path in shared_paths)
 
 
 class SlskdApiClient:
@@ -390,11 +458,7 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
         overall_ok=False,
     )
 
-    configured_shares = []
-    for host_shares in snapshot.shares.values():
-        if isinstance(host_shares, list):
-            configured_shares.extend(item for item in host_shares if isinstance(item, dict))
-    status.shared_directory_roots = len(configured_shares)
+    status.shared_directory_roots = _count_configured_share_roots(snapshot)
     status.shares_configured = status.shared_directory_roots > 0
 
     state_server_logged_in = bool(_deep_get(snapshot.state, ["server", "isLoggedIn"], False))
@@ -447,8 +511,17 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
     if status.shared_folder_count <= 0:
         status.blocking_reasons.append("slskd reports zero shared folders.")
 
+    status.empty_share_grace_active = (
+        status.shared_file_count <= 0 and status.shares_configured and _download_destination_is_shared(snapshot)
+    )
     if status.shared_file_count <= 0:
-        status.blocking_reasons.append("slskd reports zero shared files.")
+        if status.empty_share_grace_active:
+            status.warnings.append(
+                "slskd reports zero shared files, but its download directory is already configured as a shared path. "
+                "A first download session is allowed so new files can populate that share."
+            )
+        else:
+            status.blocking_reasons.append("slskd reports zero shared files.")
 
     if status.listening_port_ok is False:
         status.blocking_reasons.append("The configured Soulseek listen port is not accepting local connections.")
@@ -464,10 +537,17 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
             "External reachability is not verified. Port forwarding / inbound connectivity still needs to be confirmed outside setseeker."
         )
 
+    share_setup_needs_attention = (
+        not status.shares_configured
+        or not status.share_scan_ok
+        or status.shared_folder_count <= 0
+        or (status.shared_file_count <= 0 and not status.empty_share_grace_active)
+    )
+
     fix_steps: list[str] = []
     if not status.shares_configured:
         fix_steps.append("Add at least one absolute shared directory to slskd and restart or reload it.")
-    if not status.share_scan_ok or status.shared_file_count <= 0:
+    if not status.share_scan_ok or (status.shared_file_count <= 0 and not status.empty_share_grace_active):
         fix_steps.append("Run a successful slskd share scan and wait until the share cache reports ready with nonzero files.")
     if status.listening_port_ok is False:
         fix_steps.append("Set a valid slskd Soulseek listen port and make sure the daemon is actually bound to it.")
@@ -477,6 +557,10 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
         fix_steps.append("Log slskd into Soulseek and keep it running as the long-lived share-capable client.")
     if status.listening_port_ok is None:
         fix_steps.append("Confirm port forwarding or inbound reachability outside setseeker; this doctor can only verify local bind state.")
+    if share_setup_needs_attention:
+        fix_steps.append(
+            f"Open the slskd web UI at {snapshot.base_url}, join Soulseek chat rooms there, and ask other users for help if you get stuck configuring your shares."
+        )
 
     status.fix_steps = _unique_keep_order(fix_steps)
     status.overall_ok = len(status.blocking_reasons) == 0
@@ -579,7 +663,7 @@ def format_reciprocity_doctor(status: ReciprocityStatus) -> str:
     lines = [
         "Reciprocity doctor",
         f"- Backend: {status.backend}",
-        f"- Shares: {'OK' if status.shares_configured and status.shared_file_count > 0 else 'FAIL'}"
+        f"- Shares: {_share_status_label(status)}"
         f" ({status.shared_directory_roots} configured roots, {status.shared_folder_count} folders, {status.shared_file_count} files)",
         f"- Scan: {'OK' if status.share_scan_ok else 'FAIL'}",
         f"- Reachability: {_bool_label(status.listening_port_ok)}"
@@ -633,6 +717,16 @@ def _account_match_suffix(status: ReciprocityStatus) -> str:
     if not status.backend_username:
         return f" (expected {status.expected_username}, backend unknown)"
     return f" ({status.expected_username} vs {status.backend_username})"
+
+
+def _share_status_label(status: ReciprocityStatus) -> str:
+    if not status.shares_configured or status.shared_folder_count <= 0:
+        return "FAIL"
+    if status.shared_file_count > 0:
+        return "OK"
+    if status.empty_share_grace_active:
+        return "WARN"
+    return "FAIL"
 
 
 def _unique_keep_order(items: list[str]) -> list[str]:

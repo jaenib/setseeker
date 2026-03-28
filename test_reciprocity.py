@@ -70,6 +70,66 @@ class ReciprocityTests(unittest.TestCase):
         self.assertEqual(status.bytes_uploaded, 2048)
         self.assertEqual(status.bytes_downloaded, 4096)
 
+    def test_empty_shared_download_dir_warns_but_allows_first_session(self):
+        snapshot = reciprocity.SlskdSnapshot(
+            base_url="http://slskd.example:5030",
+            state={
+                "server": {"isLoggedIn": True},
+                "shares": {"ready": True, "scanning": False, "faulted": False, "cancelled": False, "directories": 1, "files": 0},
+                "user": {"username": "alice"},
+            },
+            options={
+                "directories": {"downloads": "/srv/slskd/spoils"},
+                "shares": {"directories": ["/srv/slskd/spoils"]},
+                "soulseek": {"listenPort": 50300, "listenIpAddress": "0.0.0.0"},
+                "global": {"upload": {"slots": 20}},
+            },
+            shares={"local": [{"id": "share-1", "directory": "/srv/slskd/spoils"}]},
+            uploads=[],
+            downloads=[],
+        )
+
+        status = reciprocity.evaluate_slskd_snapshot(
+            snapshot,
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            expected_username="alice",
+        )
+
+        self.assertTrue(status.overall_ok)
+        self.assertTrue(status.empty_share_grace_active)
+        self.assertFalse(any("zero shared files" in reason for reason in status.blocking_reasons))
+        self.assertTrue(any("download directory is already configured as a shared path" in warning for warning in status.warnings))
+        self.assertIn("- Shares: WARN", reciprocity.format_reciprocity_doctor(status))
+
+    def test_share_setup_fix_steps_offer_chat_room_help(self):
+        snapshot = reciprocity.SlskdSnapshot(
+            base_url="http://slskd.example:5030",
+            state={
+                "server": {"isLoggedIn": True},
+                "shares": {"ready": False, "scanning": True, "faulted": False, "cancelled": False, "directories": 0, "files": 0},
+                "user": {"username": "alice"},
+            },
+            options={
+                "directories": {"downloads": "/srv/slskd/spoils"},
+                "shares": {"directories": []},
+                "soulseek": {"listenPort": 50300, "listenIpAddress": "0.0.0.0"},
+                "global": {"upload": {"slots": 20}},
+            },
+            shares={},
+            uploads=[],
+            downloads=[],
+        )
+
+        status = reciprocity.evaluate_slskd_snapshot(
+            snapshot,
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            expected_username="alice",
+        )
+
+        self.assertFalse(status.overall_ok)
+        self.assertTrue(any("chat rooms" in step for step in status.fix_steps))
+        self.assertTrue(any(snapshot.base_url in step for step in status.fix_steps))
+
     def test_load_config_from_json_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "reciprocity_config.json"

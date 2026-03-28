@@ -26,7 +26,7 @@ The default share/download folder for that local bootstrap is `spoils/`.
 1. Install and run `slskd`, or let `setseeker` bootstrap it locally.
 2. Configure the same Soulseek username in `slskd` that `setseeker` uses for downloads.
 3. Add at least one explicit shared directory in `slskd`.
-4. Run a successful share scan until `slskd` reports nonzero shared folders and files.
+4. Run a successful share scan. Zero shared files still warns, but the first download session is allowed when the download destination is already one of the configured shared directories.
 5. Configure a Soulseek listen port in `slskd`.
 6. Create an API key in `slskd` so `setseeker` can audit reciprocity state.
 
@@ -46,7 +46,7 @@ Recommended fields:
 - at least one shared directory is configured
 - share scan completed successfully
 - shared folder count is nonzero
-- shared file count is nonzero
+- shared file count is nonzero, unless the download destination is already a configured shared path and this is the first download session
 - the Soulseek listen port is configured and, when `slskd` is local, locally bindable
 - the daemon is logged into Soulseek and upload-capable
 - the daemon username matches the downloader username
