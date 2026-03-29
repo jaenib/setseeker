@@ -437,7 +437,7 @@ def render_slskd_yaml(
             "soulseek:",
             f"  username: {yaml_quote(soulseek_username)}",
             f"  password: {yaml_quote(soulseek_password)}",
-            "  listen_ip_address: 0.0.0.0",
+            "  listen_ip_address: 127.0.0.1",
             f"  listen_port: {listen_port}",
             "transfers:",
             "  upload:",
