@@ -42,6 +42,8 @@ DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 5030
 DEFAULT_SLSK_LISTEN_PORT = 50300
 GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/slskd/slskd/releases/latest"
+BOOTSTRAP_ENCRYPTION_KEY_PATH = USER_DIR / "slskd.key"
+SENSITIVE_BOOTSTRAP_FIELDS = {"api_key", "jwt_key", "web_password"}
 
 
 class SlskdBootstrapError(Exception):
@@ -141,17 +143,60 @@ def find_free_port(preferred: int, host: str = "127.0.0.1", attempts: int = 50) 
     raise SlskdBootstrapError(f"Could not find a free TCP port near {preferred}")
 
 
+def _get_or_create_bootstrap_key() -> bytes:
+    """Get or create the encryption key for bootstrap metadata."""
+    if BOOTSTRAP_ENCRYPTION_KEY_PATH.is_file():
+        return BOOTSTRAP_ENCRYPTION_KEY_PATH.read_bytes()
+    key = Fernet.generate_key()
+    BOOTSTRAP_ENCRYPTION_KEY_PATH.write_bytes(key)
+    BOOTSTRAP_ENCRYPTION_KEY_PATH.chmod(0o600)
+    return key
+
+
+def _encrypt_sensitive_fields(data: dict) -> dict:
+    """Encrypt sensitive fields in bootstrap metadata."""
+    encrypted = data.copy()
+    key = _get_or_create_bootstrap_key()
+    fernet = Fernet(key)
+    for field in SENSITIVE_BOOTSTRAP_FIELDS:
+        if field in encrypted and encrypted[field]:
+            plaintext = str(encrypted[field]).encode("utf-8")
+            encrypted[field] = fernet.encrypt(plaintext).decode("utf-8")
+    return encrypted
+
+
+def _decrypt_sensitive_fields(data: dict) -> dict:
+    """Decrypt sensitive fields in bootstrap metadata."""
+    decrypted = data.copy()
+    if not BOOTSTRAP_ENCRYPTION_KEY_PATH.is_file():
+        return decrypted
+    key = BOOTSTRAP_ENCRYPTION_KEY_PATH.read_bytes()
+    fernet = Fernet(key)
+    for field in SENSITIVE_BOOTSTRAP_FIELDS:
+        if field in decrypted and decrypted[field]:
+            try:
+                ciphertext = decrypted[field].encode("utf-8")
+                decrypted[field] = fernet.decrypt(ciphertext).decode("utf-8")
+            except Exception:
+                # If decryption fails, leave the value as-is (may be unencrypted old data)
+                pass
+    return decrypted
+
+
 def load_bootstrap_metadata() -> dict:
     if not LOCAL_SLSKD_BOOTSTRAP_PATH.is_file():
         return {}
     try:
-        return json.loads(LOCAL_SLSKD_BOOTSTRAP_PATH.read_text(encoding="utf-8"))
+        data = json.loads(LOCAL_SLSKD_BOOTSTRAP_PATH.read_text(encoding="utf-8"))
+        return _decrypt_sensitive_fields(data)
     except json.JSONDecodeError as exc:
         raise SlskdBootstrapError(f"{LOCAL_SLSKD_BOOTSTRAP_PATH} contains invalid JSON") from exc
 
 
 def save_bootstrap_metadata(data: dict):
-    LOCAL_SLSKD_BOOTSTRAP_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    encrypted_data = _encrypt_sensitive_fields(data)
+    LOCAL_SLSKD_BOOTSTRAP_PATH.write_text(json.dumps(encrypted_data, indent=2), encoding="utf-8")
+    LOCAL_SLSKD_BOOTSTRAP_PATH.chmod(0o600)
 
 
 def detect_release_asset_name(tag_name: str) -> str:
@@ -299,18 +344,25 @@ def bootstrap_config(non_interactive: bool, explicit_share_dir: Optional[str]) -
     )
 
     LOCAL_SLSKD_CONFIG_PATH.write_text(yaml_text, encoding="utf-8")
+    LOCAL_SLSKD_CONFIG_PATH.chmod(0o600)
     save_bootstrap_metadata(metadata)
     write_reciprocity_config(metadata)
     return metadata
 
 
 def write_reciprocity_config(metadata: dict):
+    key = _get_or_create_bootstrap_key()
+    fernet = Fernet(key)
+    api_key = metadata.get("api_key", "")
+    encrypted_api_key = fernet.encrypt(str(api_key).encode("utf-8")).decode("utf-8") if api_key else ""
+
     RECIPROCITY_CONFIG_PATH.write_text(
         json.dumps(
             {
                 "slskd": {
                     "url": metadata["web_url"],
-                    "api_key": metadata["api_key"],
+                    "api_key": encrypted_api_key,
+                    "api_key_encrypted": True,
                     "username": "",
                     "password": "",
                     "require_same_username": True,
@@ -326,6 +378,7 @@ def write_reciprocity_config(metadata: dict):
         ),
         encoding="utf-8",
     )
+    RECIPROCITY_CONFIG_PATH.chmod(0o600)
 
 
 def yaml_quote(value: str) -> str:

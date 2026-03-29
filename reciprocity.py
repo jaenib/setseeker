@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import socket
 import urllib.error
 import urllib.parse
@@ -10,9 +11,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
+
 
 RECIPROCITY_CONFIG_PATH = Path("user/reciprocity_config.json")
 RECIPROCITY_CONFIG_EXAMPLE_PATH = Path("reciprocity_config.example.json")
+BOOTSTRAP_ENCRYPTION_KEY_PATH = Path("user/slskd.key")
 
 
 @dataclass
@@ -107,9 +114,18 @@ def load_reciprocity_config(config_path: Path = RECIPROCITY_CONFIG_PATH) -> Reci
     if not isinstance(slskd_raw, dict):
         slskd_raw = {}
 
+    api_key_from_env = _env("SETSEEK_SLSKD_API_KEY")
+    api_key_from_config = str(slskd_raw.get("api_key", "")).strip()
+    is_encrypted = bool(slskd_raw.get("api_key_encrypted", False))
+
+    if api_key_from_env:
+        api_key = api_key_from_env
+    else:
+        api_key = _decrypt_api_key(api_key_from_config, is_encrypted)
+
     slskd = SlskdConfig(
         url=_env("SETSEEK_SLSKD_URL") or str(slskd_raw.get("url", "")).strip(),
-        api_key=_env("SETSEEK_SLSKD_API_KEY") or str(slskd_raw.get("api_key", "")).strip(),
+        api_key=api_key,
         username=_env("SETSEEK_SLSKD_USERNAME") or str(slskd_raw.get("username", "")).strip(),
         password=_env("SETSEEK_SLSKD_PASSWORD") or str(slskd_raw.get("password", "")).strip(),
         require_same_username=bool(slskd_raw.get("require_same_username", True)),
@@ -145,6 +161,21 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _decrypt_api_key(api_key: str, is_encrypted: bool) -> str:
+    """Decrypt API key if it's encrypted."""
+    if not is_encrypted or not api_key:
+        return api_key
+    if Fernet is None or not BOOTSTRAP_ENCRYPTION_KEY_PATH.is_file():
+        return api_key
+    try:
+        key = BOOTSTRAP_ENCRYPTION_KEY_PATH.read_bytes()
+        fernet = Fernet(key)
+        decrypted = fernet.decrypt(api_key.encode("utf-8")).decode("utf-8")
+        return decrypted
+    except Exception:
+        return api_key
 
 
 def _bool_label(value: Optional[bool]) -> str:
