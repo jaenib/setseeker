@@ -219,7 +219,10 @@ def _normalize_path_string(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    return text.replace("\\", "/").rstrip("/")
+    text = text.replace("\\", "/")
+    if text == "/":
+        return text
+    return text.rstrip("/")
 
 
 def _extract_configured_share_paths(snapshot: SlskdSnapshot) -> list[str]:
@@ -279,7 +282,15 @@ def _download_destination_is_shared(snapshot: SlskdSnapshot) -> bool:
         return False
 
     shared_paths = _extract_configured_share_paths(snapshot)
-    return any(_normalize_path_string(shared_path) == download_directory for shared_path in shared_paths)
+    for shared_path in shared_paths:
+        normalized_share_path = _normalize_path_string(shared_path)
+        if not normalized_share_path:
+            continue
+        if normalized_share_path == "/":
+            return download_directory.startswith("/")
+        if download_directory == normalized_share_path or download_directory.startswith(f"{normalized_share_path}/"):
+            return True
+    return False
 
 
 class SlskdApiClient:
@@ -517,11 +528,13 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
     if status.shared_file_count <= 0:
         if status.empty_share_grace_active:
             status.warnings.append(
-                "slskd reports zero shared files, but its download directory is already configured as a shared path. "
+                "slskd reports zero shared files, but its download directory is in one of the shares. "
                 "A first download session is allowed so new files can populate that share."
             )
         else:
-            status.blocking_reasons.append("slskd reports zero shared files.")
+            status.blocking_reasons.append(
+                "slskd reports zero shared files, and its download directory is not configured as one of the shares."
+            )
 
     if status.listening_port_ok is False:
         status.blocking_reasons.append("The configured Soulseek listen port is not accepting local connections.")
