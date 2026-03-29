@@ -313,7 +313,7 @@ def sendseek(args, track_queries):
 
     global SLSK_USER, SLSK_PW
     SLSK_USER, SLSK_PW, cred_source = resolve_credentials()
-    print(f"Accessing Soulseek as {SLSK_USER} ({cred_source})")
+    print(f"Accessing Soulseek (credentials from {cred_source})")
 
     reciprocity_config, reciprocity_status = load_reciprocity_status(expected_username=SLSK_USER)
     print(format_reciprocity_doctor(reciprocity_status))

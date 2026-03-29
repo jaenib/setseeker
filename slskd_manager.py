@@ -44,6 +44,7 @@ DEFAULT_SLSK_LISTEN_PORT = 50300
 GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/slskd/slskd/releases/latest"
 BOOTSTRAP_ENCRYPTION_KEY_PATH = USER_DIR / "slskd.key"
 SENSITIVE_BOOTSTRAP_FIELDS = {"api_key", "jwt_key", "web_password"}
+SAFE_METADATA_FIELDS = {"web_url", "share_dir", "downloads_dir", "soulseek_username", "listen_port", "web_port"}
 
 
 class SlskdBootstrapError(Exception):
@@ -181,6 +182,11 @@ def _decrypt_sensitive_fields(data: dict) -> dict:
                 # If decryption fails, leave the value as-is (may be unencrypted old data)
                 pass
     return decrypted
+
+
+def _sanitize_metadata_for_display(metadata: dict) -> dict:
+    """Return only safe, non-sensitive metadata fields for display/logging."""
+    return {k: v for k, v in metadata.items() if k in SAFE_METADATA_FIELDS}
 
 
 def load_bootstrap_metadata() -> dict:
@@ -631,8 +637,9 @@ def main() -> int:
     try:
         if command == "ensure":
             metadata = ensure_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
-            print(f"Local slskd ready at {metadata['web_url']}")
-            print(f"Share dir: {metadata['share_dir']}")
+            safe_metadata = _sanitize_metadata_for_display(metadata)
+            print(f"Local slskd ready at {safe_metadata.get('web_url', '(unknown)')}")
+            print(f"Share dir: {safe_metadata.get('share_dir', '(unknown)')}")
             return 0
         if command == "install":
             executable, version = install_local_slskd()
@@ -642,11 +649,13 @@ def main() -> int:
             metadata = bootstrap_config(non_interactive=non_interactive, explicit_share_dir=share_dir)
             print(f"Wrote local slskd config at {LOCAL_SLSKD_CONFIG_PATH}")
             print(f"Reciprocity config written to {RECIPROCITY_CONFIG_PATH}")
-            print(f"Share dir: {metadata['share_dir']}")
+            safe_metadata = _sanitize_metadata_for_display(metadata)
+            print(f"Share dir: {safe_metadata.get('share_dir', '(unknown)')}")
             return 0
         if command == "start":
             metadata = start_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
-            print(f"Local slskd started at {metadata['web_url']}")
+            safe_metadata = _sanitize_metadata_for_display(metadata)
+            print(f"Local slskd started at {safe_metadata.get('web_url', '(unknown)')}")
             return 0
         if command == "status":
             print_status()
