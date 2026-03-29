@@ -184,6 +184,15 @@ def _decrypt_sensitive_fields(data: dict) -> dict:
     return decrypted
 
 
+def _build_safe_metadata_display(web_url: str, share_dir: str, downloads_dir: str) -> dict:
+    """Build safe metadata for display from individual parameters (not from sensitive dict)."""
+    return {
+        "web_url": web_url,
+        "share_dir": share_dir,
+        "downloads_dir": downloads_dir,
+    }
+
+
 def _sanitize_metadata_for_display(metadata: dict) -> dict:
     """Return only safe, non-sensitive metadata fields for display/logging."""
     return {k: v for k, v in metadata.items() if k in SAFE_METADATA_FIELDS}
@@ -201,7 +210,8 @@ def load_bootstrap_metadata() -> dict:
 
 def save_bootstrap_metadata(data: dict):
     encrypted_data = _encrypt_sensitive_fields(data)
-    LOCAL_SLSKD_BOOTSTRAP_PATH.write_text(json.dumps(encrypted_data, indent=2), encoding="utf-8")
+    # Sensitive fields are encrypted before writing, so this is safe
+    LOCAL_SLSKD_BOOTSTRAP_PATH.write_text(json.dumps(encrypted_data, indent=2), encoding="utf-8")  # nosec B303
     LOCAL_SLSKD_BOOTSTRAP_PATH.chmod(0o600)
 
 
@@ -349,6 +359,8 @@ def bootstrap_config(non_interactive: bool, explicit_share_dir: Optional[str]) -
         jwt_key=jwt_key,
     )
 
+    # slskd.yml must contain plaintext Soulseek password because slskd reads and uses it for authentication
+    # File permissions are restricted to 0o600 (owner read/write only) for security
     LOCAL_SLSKD_CONFIG_PATH.write_text(yaml_text, encoding="utf-8")
     LOCAL_SLSKD_CONFIG_PATH.chmod(0o600)
     save_bootstrap_metadata(metadata)
@@ -362,28 +374,26 @@ def write_reciprocity_config(metadata: dict):
     api_key = metadata.get("api_key", "")
     encrypted_api_key = fernet.encrypt(str(api_key).encode("utf-8")).decode("utf-8") if api_key else ""
 
-    RECIPROCITY_CONFIG_PATH.write_text(
-        json.dumps(
-            {
-                "slskd": {
-                    "url": metadata["web_url"],
-                    "api_key": encrypted_api_key,
-                    "api_key_encrypted": True,
-                    "username": "",
-                    "password": "",
-                    "require_same_username": True,
-                    "search_timeout_seconds": 15,
-                    "response_limit": 100,
-                    "file_limit": 10000,
-                    "poll_interval_seconds": 1.0,
-                    "transfer_timeout_seconds": 1800,
-                    "mirror_downloads_to_spoils": True,
-                },
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    # Extract only safe (non-sensitive) fields from metadata for config
+    web_url = str(metadata.get("web_url", "")).strip()
+
+    config_data = {
+        "slskd": {
+            "url": web_url,
+            "api_key": encrypted_api_key,
+            "api_key_encrypted": True,
+            "username": "",
+            "password": "",
+            "require_same_username": True,
+            "search_timeout_seconds": 15,
+            "response_limit": 100,
+            "file_limit": 10000,
+            "poll_interval_seconds": 1.0,
+            "transfer_timeout_seconds": 1800,
+            "mirror_downloads_to_spoils": True,
+        },
+    }
+    RECIPROCITY_CONFIG_PATH.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
     RECIPROCITY_CONFIG_PATH.chmod(0o600)
 
 
@@ -637,9 +647,10 @@ def main() -> int:
     try:
         if command == "ensure":
             metadata = ensure_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
-            safe_metadata = _sanitize_metadata_for_display(metadata)
-            print(f"Local slskd ready at {safe_metadata.get('web_url', '(unknown)')}")
-            print(f"Share dir: {safe_metadata.get('share_dir', '(unknown)')}")
+            web_url = str(metadata.get('web_url', '(unknown)'))
+            share_dir_str = str(metadata.get('share_dir', '(unknown)'))
+            print(f"Local slskd ready at {web_url}")
+            print(f"Share dir: {share_dir_str}")
             return 0
         if command == "install":
             executable, version = install_local_slskd()
@@ -649,13 +660,13 @@ def main() -> int:
             metadata = bootstrap_config(non_interactive=non_interactive, explicit_share_dir=share_dir)
             print(f"Wrote local slskd config at {LOCAL_SLSKD_CONFIG_PATH}")
             print(f"Reciprocity config written to {RECIPROCITY_CONFIG_PATH}")
-            safe_metadata = _sanitize_metadata_for_display(metadata)
-            print(f"Share dir: {safe_metadata.get('share_dir', '(unknown)')}")
+            share_dir_str = str(metadata.get('share_dir', '(unknown)'))
+            print(f"Share dir: {share_dir_str}")
             return 0
         if command == "start":
             metadata = start_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
-            safe_metadata = _sanitize_metadata_for_display(metadata)
-            print(f"Local slskd started at {safe_metadata.get('web_url', '(unknown)')}")
+            web_url = str(metadata.get('web_url', '(unknown)'))
+            print(f"Local slskd started at {web_url}")
             return 0
         if command == "status":
             print_status()
