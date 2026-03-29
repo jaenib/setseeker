@@ -42,10 +42,14 @@ def is_url(value):
 def classify_source(source):
     cleaned = source.strip()
     if is_url(cleaned):
-        netloc = urlparse(cleaned).netloc.lower()
-        if "soundcloud.com" in netloc:
+        parsed = urlparse(cleaned)
+        # Remove port from netloc to get domain
+        domain = parsed.netloc.lower().split(":")[0] if parsed.netloc else ""
+
+        # Use exact domain matching to prevent spoofing
+        if domain == "soundcloud.com" or domain == "www.soundcloud.com":
             return "soundcloud"
-        if "youtube.com" in netloc or "youtu.be" in netloc:
+        if domain in {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be"}:
             return "youtube"
         raise ValueError("Unsupported URL source. Use YouTube or SoundCloud links.")
     return "local"
