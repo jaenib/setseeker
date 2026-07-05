@@ -53,7 +53,7 @@ def is_retryable_shazam_error(error):
     )
     return any(snippet in message for snippet in retryable_snippets)
 
-async def recognize_segment_with_retry(file_path, max_attempts, base_delay):
+async def recognize_segment_with_retry(file_path, max_attempts, base_delay, label=None):
     last_error = None
     endpoint_countries = ("US", "GB")
     for attempt in range(1, max_attempts + 1):
@@ -67,12 +67,53 @@ async def recognize_segment_with_retry(file_path, max_attempts, base_delay):
                 raise
             wait_seconds = base_delay * attempt
             if attempt == 1:
-                print(
-                    f"Transient Shazam response issue for {os.path.basename(file_path)}; "
-                    f"retrying up to {max_attempts} attempts..."
-                )
+                prefix = f"[{label}] " if label else ""
+                print(f"{prefix}Shazam fail; retrying...")
             await asyncio.sleep(wait_seconds)
     raise last_error
+
+
+def format_timestamp(seconds):
+    return f"{seconds // 3600:02}:{(seconds % 3600) // 60:02}:{seconds % 60:02}"
+
+
+def same_detection(left, artist, title):
+    return (
+        left["artist"].casefold() == artist.casefold()
+        and left["title"].casefold() == title.casefold()
+    )
+
+
+def append_detection(track_entries, timestamp_seconds, segment_length, artist, title):
+    if (
+        track_entries
+        and track_entries[-1]["end_seconds"] == timestamp_seconds
+        and same_detection(track_entries[-1], artist, title)
+    ):
+        track_entries[-1]["end_seconds"] = timestamp_seconds + segment_length
+        track_entries[-1]["is_range"] = True
+        return False
+
+    track_entries.append(
+        {
+            "start_seconds": timestamp_seconds,
+            "end_seconds": timestamp_seconds + segment_length,
+            "artist": artist,
+            "title": title,
+            "is_range": False,
+        }
+    )
+    return True
+
+
+def format_track_entry(entry):
+    start = format_timestamp(entry["start_seconds"])
+    if entry["is_range"]:
+        end = format_timestamp(entry["end_seconds"])
+        timestamp = f"{start}-{end}"
+    else:
+        timestamp = start
+    return f"[{timestamp}] {entry['artist']} - {entry['title']}"
 
 # Split set audio into segments
 def split_audio(input_file, segment_length):
@@ -117,7 +158,7 @@ def split_audio(input_file, segment_length):
 # Recognize tracks with ShazamIO
 async def recognize_tracks(segment_length):
     print("Recognizing tracks with Shazam...")
-    track_list = []
+    track_entries = []
 
     for file in sorted(os.listdir(SEGMENTS_DIR)):
         if file.endswith(".mp3"):
@@ -126,32 +167,40 @@ async def recognize_tracks(segment_length):
             # Assuming _XXX.mp3 format
             segment_index = int(file.split("_")[-1].split(".")[0])
             timestamp_seconds = segment_index * segment_length
-            timestamp = f"{timestamp_seconds // 3600:02}:{(timestamp_seconds % 3600) // 60:02}:{timestamp_seconds % 60:02}"
+            timestamp = format_timestamp(timestamp_seconds)
 
             try:
                 result = await recognize_segment_with_retry(
                     file_path=file_path,
                     max_attempts=recognition_retries,
                     base_delay=recognition_retry_delay,
+                    label=timestamp,
                 )
                 if "track" in result:
                     title = result["track"]["title"]
                     artist = result["track"]["subtitle"]
-                    track_list.append(f"[{timestamp}] {artist} - {title}")
-                    print(f"Recognized: [{timestamp}] {artist} - {title}")
+                    is_new_entry = append_detection(
+                        track_entries=track_entries,
+                        timestamp_seconds=timestamp_seconds,
+                        segment_length=segment_length,
+                        artist=artist,
+                        title=title,
+                    )
+                    if is_new_entry:
+                        print(f"Recognized: [{timestamp}] {artist} - {title}")
                 else:
-                    print(f"[{timestamp}] No match found for {file}")
+                    print(f"[{timestamp}] No match.")
             except Exception as e:
                 if is_retryable_shazam_error(e):
-                    print(f"[{timestamp}] Shazam temporary response issue for {file}; skipped after retries.")
+                    print(f"[{timestamp}] Shazam fail; skip.")
                 else:
                     compact_error = str(e).splitlines()[0]
-                    print(f"Error processing {file}: {type(e).__name__}: {compact_error}")
+                    print(f"[{timestamp}] Shazam error: {type(e).__name__}: {compact_error}")
             finally:
                 # Small pacing helps reduce transient API failures from bursty requests.
                 await asyncio.sleep(recognition_request_spacing)
 
-    return track_list
+    return [format_track_entry(entry) for entry in track_entries]
 
 # ID all sets in "sets"
 async def main(segment_length):

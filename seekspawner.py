@@ -237,7 +237,11 @@ def build_track_queries(tracklist_dir, use_last_run_only=True):
 
         for lineno, line in enumerate(lines, 1):
             original = line.strip()
-            cleaned = re.sub(r"^\[\d{2}:\d{2}:\d{2}\]\s*", "", original)
+            cleaned = re.sub(
+                r"^\[\d{2}:\d{2}:\d{2}(?:-\d{2}:\d{2}:\d{2})?\]\s*",
+                "",
+                original,
+            )
 
             if not cleaned or cleaned.lower().startswith("final tracklist"):
                 skipped.append(f"[{file_path}:{lineno}] HEADER OR EMPTY -> {cleaned}")

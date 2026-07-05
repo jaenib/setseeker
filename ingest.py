@@ -145,7 +145,15 @@ def ingest_local(source):
 
 def ingest_soundcloud(source):
     before = current_mp3_set()
-    scdl.main(source)
+    try:
+        scdl.main(source)
+    except Exception:
+        created = new_mp3_files(before)
+        for path in created:
+            Path(path).unlink(missing_ok=True)
+        if created:
+            print(f"Cleaned up {len(created)} partial SoundCloud download(s) from this run.")
+        raise
     imported = new_mp3_files(before)
     if not imported:
         print("SoundCloud download completed but no new MP3 files were detected in sets/.")

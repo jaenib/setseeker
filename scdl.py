@@ -1,13 +1,19 @@
 import os
 import re
 import json
+import sys
+import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
+from pathlib import Path
 
 from sclib import Playlist, SoundcloudAPI, Track
 
 soundcloud_url = ""
+SETS_DIR = Path("sets")
 
 
 def normalize_soundcloud_url(url):
@@ -22,6 +28,13 @@ def normalize_soundcloud_url(url):
     if not parsed.netloc:
         raise ValueError(f"Invalid SoundCloud URL: {url}")
 
+    path = parsed.path.strip("/").lower()
+    if path.startswith("discover/sets/") or "track-stations:" in path:
+        raise ValueError(
+            "That SoundCloud link is a generated station, not a set. "
+            "Paste a direct track, user playlist/set, or local file/folder path."
+        )
+
     # Shared URLs often include tracking params (`si`, `utm_*`) that can break resolve.
     query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=False)
     keep = [(k, v) for k, v in query_pairs if k == "secret_token"]
@@ -34,6 +47,48 @@ def sanitize_filename(name):
     safe = re.sub(r'[\\/:*?"<>|]', "_", name)
     safe = re.sub(r"\s+", " ", safe).strip()
     return safe or "untitled"
+
+
+def unique_output_path(path):
+    if not path.exists():
+        return path
+
+    for index in range(1, 10000):
+        candidate = path.with_name(f"{path.stem} ({index}){path.suffix}")
+        if not candidate.exists():
+            return candidate
+
+    raise RuntimeError(f"Could not find a unique filename for {path}")
+
+
+@contextmanager
+def download_spinner(message):
+    if not sys.stdout.isatty():
+        print(f"{message}...")
+        yield
+        return
+
+    stop_event = threading.Event()
+    frames = "|/-\\"
+    started_at = time.monotonic()
+
+    def animate():
+        index = 0
+        while not stop_event.wait(0.12):
+            elapsed = int(time.monotonic() - started_at)
+            sys.stdout.write(f"\r{frames[index % len(frames)]} {message} ({elapsed}s)")
+            sys.stdout.flush()
+            index += 1
+
+    thread = threading.Thread(target=animate, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join()
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
 
 
 def fetch_text(url):
@@ -79,10 +134,15 @@ def resolve_with_client_id(url, client_id):
     kind = obj.get("kind")
     if kind == "track":
         return Track(obj=obj, client=client)
-    if kind in ("playlist", "system-playlist"):
+    if kind == "playlist":
         playlist = Playlist(obj=obj, client=client)
         playlist.clean_attributes()
         return playlist
+    if kind == "system-playlist":
+        raise ValueError(
+            "That SoundCloud link is a generated station or chart, not a set. "
+            "Paste a direct track, user playlist/set, or local file/folder path."
+        )
     return None
 
 
@@ -107,14 +167,26 @@ def resolve_with_fallback(url):
 
 
 def download_track(track):
-    filename = f"sets/{sanitize_filename(track.artist)} - {sanitize_filename(track.title)}.mp3"
-    with open(filename, "wb+") as file:
-        track.write_mp3_to(file)
-    print(f"Downloaded: {filename}")
+    filename = f"{sanitize_filename(track.artist)} - {sanitize_filename(track.title)}.mp3"
+    destination = unique_output_path(SETS_DIR / filename)
+    partial = destination.with_name(f".{destination.name}.part")
+    if partial.exists():
+        partial.unlink()
+
+    try:
+        with download_spinner(f"Downloading {destination.name}"):
+            with open(partial, "wb") as file:
+                track.write_mp3_to(file)
+            partial.replace(destination)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
+
+    print(f"Downloaded: {destination}")
 
 
 def main(soundcloud_url):
-    os.makedirs("sets", exist_ok=True)
+    os.makedirs(SETS_DIR, exist_ok=True)
     normalized_url = normalize_soundcloud_url(soundcloud_url)
 
     resolved = resolve_with_fallback(normalized_url)
