@@ -103,7 +103,7 @@ else
     echo "Soulseek credentials are stored encrypted at $CRED_FILE"
     echo "Choose N if you'd rather enter credentials at runtime."
 
-    if [[ -n "$SLSK_USERNAME" && -n "$SLSK_PASSWORD" ]]; then
+    if [[ -n "${SLSK_USERNAME:-}" && -n "${SLSK_PASSWORD:-}" ]]; then
         python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "$CRED_DIR"
         echo "Credentials stored from environment variables."
     else

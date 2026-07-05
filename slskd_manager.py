@@ -21,7 +21,7 @@ from typing import Optional
 
 from cryptography.fernet import Fernet
 
-from reciprocity import RECIPROCITY_CONFIG_PATH, SlskdApiClient, SlskdConfig
+from reciprocity import RECIPROCITY_CONFIG_PATH, SlskdApiClient, load_reciprocity_config
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -480,17 +480,9 @@ def configured_api_health() -> SlskdApiHealth:
 
     base_url = ""
     try:
-        config = json.loads(RECIPROCITY_CONFIG_PATH.read_text(encoding="utf-8"))
-        slskd = config.get("slskd", {})
-        base_url = str(slskd.get("url", ""))
-        client = SlskdApiClient(
-            SlskdConfig(
-                url=base_url,
-                api_key=str(slskd.get("api_key", "")),
-                username=str(slskd.get("username", "")),
-                password=str(slskd.get("password", "")),
-            )
-        )
+        config = load_reciprocity_config(RECIPROCITY_CONFIG_PATH)
+        base_url = config.slskd.url
+        client = SlskdApiClient(config.slskd)
         client.get_application()
         return SlskdApiHealth(configured=True, authenticated=True, service_up=True)
     except Exception as exc:
