@@ -100,6 +100,54 @@ class SlskdManagerTests(unittest.TestCase):
         self.assertTrue(health.authenticated)
         self.assertEqual(captured_configs[0].api_key, "real-api-key")
 
+    def test_refresh_local_slskd_config_credentials_rewrites_generated_config(self):
+        with TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            app_dir = tmp_path / "slskd" / "app"
+            app_dir.mkdir(parents=True)
+            config_path = app_dir / "slskd.yml"
+            bootstrap_path = tmp_path / "slskd" / "bootstrap.json"
+            reciprocity_path = tmp_path / "reciprocity_config.json"
+            bootstrap_key_path = tmp_path / "slskd.key"
+            share_dir = tmp_path / "share"
+            downloads_dir = tmp_path / "downloads"
+            incomplete_dir = tmp_path / "incomplete"
+
+            metadata = {
+                "web_url": "http://127.0.0.1:5030",
+                "web_port": 5030,
+                "listen_port": 50300,
+                "api_key": "api-key",
+                "jwt_key": "jwt-key",
+                "web_username": "setseeker",
+                "web_password": "web-pass",
+                "share_dir": str(share_dir),
+                "downloads_dir": str(downloads_dir),
+                "incomplete_dir": str(incomplete_dir),
+                "soulseek_username": "old-user",
+            }
+            config_path.write_text("old config", encoding="utf-8")
+
+            with mock.patch.object(slskd_manager, "LOCAL_SLSKD_CONFIG_PATH", config_path), mock.patch.object(
+                slskd_manager, "LOCAL_SLSKD_BOOTSTRAP_PATH", bootstrap_path
+            ), mock.patch.object(slskd_manager, "BOOTSTRAP_ENCRYPTION_KEY_PATH", bootstrap_key_path), mock.patch.object(
+                slskd_manager, "RECIPROCITY_CONFIG_PATH", reciprocity_path
+            ):
+                slskd_manager.save_bootstrap_metadata(metadata)
+                with mock.patch.object(
+                    slskd_manager,
+                    "resolve_credentials",
+                    return_value=slskd_manager.SoulseekCredentials("new-user", "new-pass", "test"),
+                ):
+                    refreshed = slskd_manager.refresh_local_slskd_config_credentials(non_interactive=True)
+
+            yaml_text = config_path.read_text(encoding="utf-8")
+            self.assertIn('username: "new-user"', yaml_text)
+            self.assertIn('password: "new-pass"', yaml_text)
+            self.assertIn('api_key: "api-key"', yaml_text)
+            self.assertEqual(refreshed["soulseek_username"], "new-user")
+            self.assertTrue(reciprocity_path.is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

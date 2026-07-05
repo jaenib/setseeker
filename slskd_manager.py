@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -213,6 +214,83 @@ def save_bootstrap_metadata(data: dict):
     # Sensitive fields are encrypted before writing, so this is safe
     LOCAL_SLSKD_BOOTSTRAP_PATH.write_text(json.dumps(encrypted_data, indent=2), encoding="utf-8")  # nosec B303
     LOCAL_SLSKD_BOOTSTRAP_PATH.chmod(0o600)
+
+
+def _metadata_int(metadata: dict, key: str, default: int) -> int:
+    try:
+        return int(metadata.get(key) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _web_port_from_metadata(metadata: dict) -> int:
+    if metadata.get("web_port"):
+        return _metadata_int(metadata, "web_port", DEFAULT_WEB_PORT)
+    web_url = str(metadata.get("web_url", "")).strip()
+    if web_url:
+        parsed = urllib.parse.urlparse(web_url)
+        if parsed.port:
+            return parsed.port
+    return DEFAULT_WEB_PORT
+
+
+def refresh_local_slskd_config_credentials(non_interactive: bool) -> dict:
+    if not LOCAL_SLSKD_CONFIG_PATH.is_file():
+        raise SlskdBootstrapError(
+            f"Local slskd config does not exist yet at {LOCAL_SLSKD_CONFIG_PATH}. Run setup normally first."
+        )
+
+    metadata = load_bootstrap_metadata()
+    if not metadata:
+        raise SlskdBootstrapError(
+            f"Cannot refresh {LOCAL_SLSKD_CONFIG_PATH}; bootstrap metadata is missing at {LOCAL_SLSKD_BOOTSTRAP_PATH}."
+        )
+
+    missing_fields = [
+        field
+        for field in ("api_key", "jwt_key", "web_password")
+        if not str(metadata.get(field, "")).strip()
+    ]
+    if missing_fields:
+        raise SlskdBootstrapError(
+            "Cannot refresh local slskd credentials because bootstrap metadata is missing: "
+            + ", ".join(missing_fields)
+        )
+
+    credentials = resolve_credentials(allow_prompt=not non_interactive)
+    share_dir = Path(metadata.get("share_dir") or DEFAULT_SHARE_DIR).expanduser().resolve()
+    downloads_dir = Path(metadata.get("downloads_dir") or DOWNLOAD_DIR).expanduser().resolve()
+    incomplete_dir = Path(metadata.get("incomplete_dir") or INCOMPLETE_DIR).expanduser().resolve()
+    for path in (share_dir, downloads_dir, incomplete_dir):
+        path.mkdir(parents=True, exist_ok=True)
+
+    metadata["soulseek_username"] = credentials.username
+    metadata["share_dir"] = str(share_dir)
+    metadata["downloads_dir"] = str(downloads_dir)
+    metadata["incomplete_dir"] = str(incomplete_dir)
+    metadata["web_port"] = _web_port_from_metadata(metadata)
+    metadata["listen_port"] = _metadata_int(metadata, "listen_port", DEFAULT_SLSK_LISTEN_PORT)
+    metadata["web_username"] = str(metadata.get("web_username") or "setseeker")
+
+    yaml_text = render_slskd_yaml(
+        soulseek_username=credentials.username,
+        soulseek_password=credentials.password,
+        share_dir=share_dir,
+        downloads_dir=downloads_dir,
+        incomplete_dir=incomplete_dir,
+        web_port=metadata["web_port"],
+        listen_port=metadata["listen_port"],
+        web_username=metadata["web_username"],
+        web_password=str(metadata["web_password"]),
+        api_key=str(metadata["api_key"]),
+        jwt_key=str(metadata["jwt_key"]),
+    )
+
+    LOCAL_SLSKD_CONFIG_PATH.write_text(yaml_text, encoding="utf-8")
+    LOCAL_SLSKD_CONFIG_PATH.chmod(0o600)
+    save_bootstrap_metadata(metadata)
+    write_reciprocity_config(metadata)
+    return metadata
 
 
 def detect_release_asset_name(tag_name: str) -> str:
@@ -530,6 +608,27 @@ def process_is_running(pid: int) -> bool:
         return False
 
 
+def stop_local_slskd(timeout_seconds: float = 10.0) -> bool:
+    pid = read_pid()
+    if not pid or not process_is_running(pid):
+        return False
+
+    os.kill(pid, 15)
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not process_is_running(pid):
+            return True
+        time.sleep(0.25)
+
+    os.kill(pid, 9)
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        if not process_is_running(pid):
+            return True
+        time.sleep(0.25)
+    return not process_is_running(pid)
+
+
 def start_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) -> dict:
     metadata = bootstrap_config(non_interactive=non_interactive, explicit_share_dir=explicit_share_dir)
     write_reciprocity_config(metadata)
@@ -626,6 +725,12 @@ def parse_args():
     start_parser.add_argument("--non-interactive", action="store_true", help="Do not prompt; use repo defaults.")
     start_parser.add_argument("--share-dir", help="Explicit directory to share through slskd.")
 
+    refresh_parser = subparsers.add_parser(
+        "refresh-credentials",
+        help="Rewrite generated local slskd config from current Soulseek credentials and restart it.",
+    )
+    refresh_parser.add_argument("--non-interactive", action="store_true", help="Do not prompt; use stored credentials only.")
+
     subparsers.add_parser("status", help="Print local slskd bootstrap status.")
     return parser.parse_args()
 
@@ -659,6 +764,17 @@ def main() -> int:
             metadata = start_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
             web_url = str(metadata.get('web_url', '(unknown)'))
             print(f"Local slskd started at {web_url}")
+            return 0
+        if command == "refresh-credentials":
+            metadata = refresh_local_slskd_config_credentials(non_interactive=non_interactive)
+            stopped = stop_local_slskd()
+            if stopped:
+                print("Restarting local slskd with refreshed Soulseek credentials.")
+            else:
+                print("Refreshed local slskd credentials; no tracked local slskd process needed stopping.")
+            metadata = start_local_slskd(non_interactive=non_interactive, explicit_share_dir=share_dir)
+            web_url = str(metadata.get('web_url', '(unknown)'))
+            print(f"Local slskd ready at {web_url}")
             return 0
         if command == "status":
             print_status()

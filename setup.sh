@@ -2,6 +2,7 @@
 set -euo pipefail
 
 echo "Setting up setseeker..."
+CREDENTIALS_CHANGED=0
 
 # 1. Select Python and create virtual environment
 PYTHON_BIN=""
@@ -91,6 +92,7 @@ if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
         echo ""
         source .venv/bin/activate
         python3 crencrypt.py "$username" "$password" "$CRED_DIR"
+        CREDENTIALS_CHANGED=1
     else
         echo "Keeping existing encrypted credentials."
     fi
@@ -106,6 +108,7 @@ else
     if [[ -n "${SLSK_USERNAME:-}" && -n "${SLSK_PASSWORD:-}" ]]; then
         python3 crencrypt.py "$SLSK_USERNAME" "$SLSK_PASSWORD" "$CRED_DIR"
         echo "Credentials stored from environment variables."
+        CREDENTIALS_CHANGED=1
     else
         read -p "Store credentials now? (Y/n) " answer
         answer=${answer:-Y}  # default to 'Y' if empty
@@ -115,10 +118,16 @@ else
             read -s -p "Enter your Soulseek password: " password
             echo ""
             python3 crencrypt.py "$username" "$password" "$CRED_DIR"
+            CREDENTIALS_CHANGED=1
         else
             echo "Skipping storage. seekspawner.py will prompt at runtime."
         fi
     fi
+fi
+
+if [[ "$CREDENTIALS_CHANGED" -eq 1 && -f "user/slskd/app/slskd.yml" ]]; then
+    echo "Refreshing local slskd config with the updated Soulseek credentials..."
+    python slskd_manager.py refresh-credentials --non-interactive
 fi
 
 echo "Preparing a local slskd backend for the recommended reciprocity-backed mode..."
@@ -127,11 +136,33 @@ if python slskd_manager.py ensure; then
 else
     echo "Automatic slskd setup did not complete."
     echo "You can rerun ./setup.sh after fixing network or permissions."
+    exit 1
+fi
+
+echo "Checking reciprocity-backed download readiness..."
+if ! python - <<'PY'
+import sys
+
+from reciprocity import format_reciprocity_doctor
+from seekspawner import get_expected_username_for_reciprocity, load_reciprocity_status
+
+expected_username = get_expected_username_for_reciprocity()
+_, status = load_reciprocity_status(expected_username)
+print(format_reciprocity_doctor(status))
+if not status.overall_ok:
+    print(
+        "\nsetseek setup incomplete: local slskd is configured but not ready for reciprocity-backed downloads.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+PY
+then
+    echo "Fix the blocking reasons above, then rerun ./setup.sh or ./launcher.sh --doctor."
+    exit 1
 fi
 
 echo "setseek setup success"
 echo "next steps:"
-echo "  1. run ./launcher.sh --doctor"
-echo "  2. then run ./launcher.sh '<youtube/soundcloud url or local file>'"
+echo "  1. run ./launcher.sh '<youtube/soundcloud url or local file>'"
 #echo "Always activate the virtual environment with:"
 #echo "   source setseek_venv/bin/activate"
