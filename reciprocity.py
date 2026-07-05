@@ -550,12 +550,18 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
     if not status.share_scan_ok:
         status.blocking_reasons.append("slskd share scan is not healthy yet (not ready, still scanning, or faulted).")
 
-    if status.shared_folder_count <= 0:
-        status.blocking_reasons.append("slskd reports zero shared folders.")
-
     status.empty_share_grace_active = (
         status.shared_file_count <= 0 and status.shares_configured and _download_destination_is_shared(snapshot)
     )
+
+    if status.shared_folder_count <= 0 and not status.empty_share_grace_active:
+        status.blocking_reasons.append("slskd reports zero shared folders.")
+    elif status.shared_folder_count <= 0 and status.empty_share_grace_active:
+        status.warnings.append(
+            "slskd reports zero shared folders, but its download directory is in one of the shares. "
+            "A first download session is allowed so new files can populate that share."
+        )
+
     if status.shared_file_count <= 0:
         if status.empty_share_grace_active:
             status.warnings.append(
@@ -584,7 +590,7 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
     share_setup_needs_attention = (
         not status.shares_configured
         or not status.share_scan_ok
-        or status.shared_folder_count <= 0
+        or (status.shared_folder_count <= 0 and not status.empty_share_grace_active)
         or (status.shared_file_count <= 0 and not status.empty_share_grace_active)
     )
 
@@ -765,6 +771,8 @@ def _account_match_suffix(status: ReciprocityStatus) -> str:
 
 def _share_status_label(status: ReciprocityStatus) -> str:
     if not status.shares_configured or status.shared_folder_count <= 0:
+        if status.empty_share_grace_active:
+            return "WARN"
         return "FAIL"
     if status.shared_file_count > 0:
         return "OK"

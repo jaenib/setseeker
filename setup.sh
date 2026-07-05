@@ -68,6 +68,13 @@ KEY_FILE="$CRED_DIR/slsk.key"
 LEGACY_CRED_FILE="../user/slsk_cred.json"
 LEGACY_KEY_FILE="../user/slsk.key"
 
+stored_or_env_credentials_available() {
+    if [[ -n "${SLSK_USERNAME:-}" && -n "${SLSK_PASSWORD:-}" ]]; then
+        return 0
+    fi
+    [[ -f "$CRED_FILE" && -f "$KEY_FILE" ]]
+}
+
 # Offer to import credentials from legacy sibling folders to avoid duplicate stores.
 if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] && [ -f "$LEGACY_KEY_FILE" ]; then
     echo "Found encrypted Soulseek credentials in ../user (legacy location)."
@@ -125,8 +132,12 @@ else
     fi
 fi
 
-if [[ "$CREDENTIALS_CHANGED" -eq 1 && -f "user/slskd/app/slskd.yml" ]]; then
-    echo "Refreshing local slskd config with the updated Soulseek credentials..."
+if [[ -f "user/slskd/app/slskd.yml" ]] && stored_or_env_credentials_available; then
+    if [[ "$CREDENTIALS_CHANGED" -eq 1 ]]; then
+        echo "Refreshing local slskd config with the updated Soulseek credentials..."
+    else
+        echo "Repairing local slskd config from current setup settings..."
+    fi
     python slskd_manager.py refresh-credentials --non-interactive
 fi
 
@@ -142,12 +153,28 @@ fi
 echo "Checking reciprocity-backed download readiness..."
 if ! python - <<'PY'
 import sys
+import time
 
 from reciprocity import format_reciprocity_doctor
 from seekspawner import get_expected_username_for_reciprocity, load_reciprocity_status
 
 expected_username = get_expected_username_for_reciprocity()
-_, status = load_reciprocity_status(expected_username)
+status = None
+deadline = time.time() + 90
+printed_wait = False
+while True:
+    _, status = load_reciprocity_status(expected_username)
+    if status.overall_ok:
+        break
+
+    if time.time() >= deadline:
+        break
+
+    if not printed_wait:
+        print("Waiting for slskd to log in and finish its initial share scan...")
+        printed_wait = True
+    time.sleep(3)
+
 print(format_reciprocity_doctor(status))
 if not status.overall_ok:
     print(

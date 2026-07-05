@@ -44,6 +44,7 @@ class SlskdManagerTests(unittest.TestCase):
         self.assertIn('key: "jwt-key-456"', yaml_text)
         self.assertIn("ttl: 604800000", yaml_text)
         self.assertIn('port: 5030', yaml_text)
+        self.assertIn('listen_ip_address: 0.0.0.0', yaml_text)
         self.assertIn('listen_port: 50300', yaml_text)
 
     def test_configured_api_health_distinguishes_auth_failure_from_unreachable(self):
@@ -145,6 +146,7 @@ class SlskdManagerTests(unittest.TestCase):
             self.assertIn('username: "new-user"', yaml_text)
             self.assertIn('password: "new-pass"', yaml_text)
             self.assertIn('api_key: "api-key"', yaml_text)
+            self.assertIn("listen_ip_address: 0.0.0.0", yaml_text)
             self.assertEqual(refreshed["soulseek_username"], "new-user")
             self.assertTrue(reciprocity_path.is_file())
 

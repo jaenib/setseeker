@@ -101,6 +101,37 @@ class ReciprocityTests(unittest.TestCase):
         self.assertTrue(any("download directory is in one of the shares" in warning for warning in status.warnings))
         self.assertIn("- Shares: WARN", reciprocity.format_reciprocity_doctor(status))
 
+    def test_empty_download_share_root_with_zero_folders_allows_first_session(self):
+        snapshot = reciprocity.SlskdSnapshot(
+            base_url="http://slskd.example:5030",
+            state={
+                "server": {"isLoggedIn": True},
+                "shares": {"ready": True, "scanning": False, "faulted": False, "cancelled": False, "directories": 0, "files": 0},
+                "user": {"username": "alice"},
+            },
+            options={
+                "directories": {"downloads": "/srv/slskd/spoils"},
+                "shares": {"directories": ["/srv/slskd/spoils"]},
+                "soulseek": {"listenPort": 50300, "listenIpAddress": "0.0.0.0"},
+                "global": {"upload": {"slots": 20}},
+            },
+            shares={"local": [{"id": "share-1", "directory": "/srv/slskd/spoils"}]},
+            uploads=[],
+            downloads=[],
+        )
+
+        status = reciprocity.evaluate_slskd_snapshot(
+            snapshot,
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            expected_username="alice",
+        )
+
+        self.assertTrue(status.overall_ok)
+        self.assertTrue(status.empty_share_grace_active)
+        self.assertFalse(any("zero shared folders" in reason for reason in status.blocking_reasons))
+        self.assertTrue(any("zero shared folders" in warning for warning in status.warnings))
+        self.assertIn("- Shares: WARN", reciprocity.format_reciprocity_doctor(status))
+
     def test_empty_download_dir_outside_shares_blocks_with_explicit_reason(self):
         snapshot = reciprocity.SlskdSnapshot(
             base_url="http://slskd.example:5030",
