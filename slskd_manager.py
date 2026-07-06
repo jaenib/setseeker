@@ -84,6 +84,30 @@ def load_cred(cred_dir: Path):
     return data["username"], fernet.decrypt(data["password_encrypted"].encode("utf-8")).decode("utf-8")
 
 
+def validate_soulseek_credentials(username: str, password: str, source: str) -> None:
+    if not str(username).strip():
+        raise SlskdBootstrapError(
+            f"The Soulseek username from {source} is empty. Rerun ./setup.sh and re-enter your credentials."
+        )
+    if not str(password):
+        raise SlskdBootstrapError(
+            f"The Soulseek password from {source} is empty; slskd cannot log in without it. "
+            "Rerun ./setup.sh and answer 'y' when asked to change credentials."
+        )
+
+
+def load_stored_credentials() -> tuple[str, str]:
+    try:
+        return load_cred(CREDENTIAL_DIR)
+    except SlskdBootstrapError:
+        raise
+    except Exception as exc:
+        raise SlskdBootstrapError(
+            f"Stored Soulseek credentials in {CREDENTIAL_DIR}/ could not be read or decrypted: {exc}. "
+            "Rerun ./setup.sh to recreate them."
+        ) from exc
+
+
 def resolve_credentials(allow_prompt: bool) -> SoulseekCredentials:
     env_user = os.environ.get("SLSK_USERNAME", "").strip()
     env_pw = os.environ.get("SLSK_PASSWORD", "").strip()
@@ -91,7 +115,8 @@ def resolve_credentials(allow_prompt: bool) -> SoulseekCredentials:
         return SoulseekCredentials(env_user, env_pw, "environment variables")
 
     if cred_pair_exists(CREDENTIAL_DIR):
-        username, password = load_cred(CREDENTIAL_DIR)
+        username, password = load_stored_credentials()
+        validate_soulseek_credentials(username, password, source="the stored credentials in user/")
         return SoulseekCredentials(username, password, "user/")
 
     if not allow_prompt:
@@ -589,6 +614,39 @@ def _bootstrap_failure_message(health: SlskdApiHealth) -> str:
     return f"slskd did not become reachable. {detail}. Check {LOCAL_SLSKD_LOG_PATH} for details."
 
 
+LOGIN_FAILURE_LOG_MARKERS = (
+    (
+        "username and/or password invalid",
+        "slskd refused to attempt a Soulseek login because its configured username or password is empty or invalid.",
+    ),
+    (
+        "rejected login",
+        "the Soulseek server rejected the configured username/password.",
+    ),
+)
+
+
+def local_slskd_login_failure_reason() -> Optional[str]:
+    """Return a human-readable login failure from the most recent run in the local slskd log, if any."""
+    try:
+        with open(LOCAL_SLSKD_LOG_PATH, "rb") as log_file:
+            log_file.seek(0, os.SEEK_END)
+            size = log_file.tell()
+            log_file.seek(max(0, size - 131072))
+            tail = log_file.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+    # The log is append-only across restarts; only inspect lines from the latest daemon start.
+    last_start = tail.rfind("Invocation ID:")
+    recent = tail[last_start:] if last_start != -1 else tail
+    recent_lower = recent.lower()
+    for marker, reason in LOGIN_FAILURE_LOG_MARKERS:
+        if marker in recent_lower:
+            return reason
+    return None
+
+
 def read_pid() -> Optional[int]:
     if not LOCAL_SLSKD_PID_PATH.is_file():
         return None
@@ -733,6 +791,11 @@ def parse_args():
     refresh_parser.add_argument("--non-interactive", action="store_true", help="Do not prompt; use stored credentials only.")
 
     subparsers.add_parser("status", help="Print local slskd bootstrap status.")
+
+    subparsers.add_parser(
+        "check-stored-credentials",
+        help="Exit nonzero when stored Soulseek credentials are missing, unreadable, or empty.",
+    )
     return parser.parse_args()
 
 
@@ -779,6 +842,14 @@ def main() -> int:
             return 0
         if command == "status":
             print_status()
+            return 0
+        if command == "check-stored-credentials":
+            if not cred_pair_exists(CREDENTIAL_DIR):
+                print("No stored Soulseek credentials found in user/.", file=sys.stderr)
+                return 1
+            username, password = load_stored_credentials()
+            validate_soulseek_credentials(username, password, source="the stored credentials in user/")
+            print("Stored Soulseek credentials look usable.")
             return 0
     except SlskdBootstrapError as exc:
         print(f"slskd bootstrap error: {exc}", file=sys.stderr)

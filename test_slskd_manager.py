@@ -1,3 +1,5 @@
+import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,6 +8,21 @@ from unittest import mock
 import reciprocity
 import slskd_manager
 from cryptography.fernet import Fernet
+
+
+def write_cred_pair(cred_dir: Path, username: str, password: str):
+    key = Fernet.generate_key()
+    fernet = Fernet(key)
+    (cred_dir / "slsk.key").write_bytes(key)
+    (cred_dir / "slsk_cred.json").write_text(
+        json.dumps(
+            {
+                "username": username,
+                "password_encrypted": fernet.encrypt(password.encode("utf-8")).decode("utf-8"),
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 class SlskdManagerTests(unittest.TestCase):
@@ -100,6 +117,70 @@ class SlskdManagerTests(unittest.TestCase):
 
         self.assertTrue(health.authenticated)
         self.assertEqual(captured_configs[0].api_key, "real-api-key")
+
+    def test_resolve_credentials_rejects_empty_stored_password(self):
+        with TemporaryDirectory() as tmpdir:
+            cred_dir = Path(tmpdir)
+            write_cred_pair(cred_dir, "alice", "")
+
+            with mock.patch.object(slskd_manager, "CREDENTIAL_DIR", cred_dir), mock.patch.dict(
+                os.environ, {"SLSK_USERNAME": "", "SLSK_PASSWORD": ""}
+            ):
+                with self.assertRaises(slskd_manager.SlskdBootstrapError) as ctx:
+                    slskd_manager.resolve_credentials(allow_prompt=False)
+
+        self.assertIn("password", str(ctx.exception))
+
+    def test_resolve_credentials_returns_valid_stored_pair(self):
+        with TemporaryDirectory() as tmpdir:
+            cred_dir = Path(tmpdir)
+            write_cred_pair(cred_dir, "alice", "hunter2")
+
+            with mock.patch.object(slskd_manager, "CREDENTIAL_DIR", cred_dir), mock.patch.dict(
+                os.environ, {"SLSK_USERNAME": "", "SLSK_PASSWORD": ""}
+            ):
+                credentials = slskd_manager.resolve_credentials(allow_prompt=False)
+
+        self.assertEqual(credentials.username, "alice")
+        self.assertEqual(credentials.password, "hunter2")
+
+    def test_login_failure_reason_detects_invalid_credentials(self):
+        with TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "slskd.log"
+            log_path.write_text(
+                "[18:04:02 INF] Invocation ID: 7a2cddfd\n"
+                "[18:04:08 WRN] Not connecting to the Soulseek server; username and/or password invalid.  "
+                "Specify valid credentials and manually connect, or update config and restart.\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(slskd_manager, "LOCAL_SLSKD_LOG_PATH", log_path):
+                reason = slskd_manager.local_slskd_login_failure_reason()
+
+        self.assertIsNotNone(reason)
+        self.assertIn("username or password", reason)
+
+    def test_login_failure_reason_ignores_failures_from_previous_run(self):
+        with TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "slskd.log"
+            log_path.write_text(
+                "[17:36:02 INF] Invocation ID: old-run\n"
+                "[17:36:25 WRN] Not connecting to the Soulseek server; username and/or password invalid.\n"
+                "[18:04:02 INF] Invocation ID: new-run\n"
+                "[18:04:08 INF] Application started\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(slskd_manager, "LOCAL_SLSKD_LOG_PATH", log_path):
+                reason = slskd_manager.local_slskd_login_failure_reason()
+
+        self.assertIsNone(reason)
+
+    def test_login_failure_reason_handles_missing_log(self):
+        with TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "does-not-exist.log"
+            with mock.patch.object(slskd_manager, "LOCAL_SLSKD_LOG_PATH", log_path):
+                reason = slskd_manager.local_slskd_login_failure_reason()
+
+        self.assertIsNone(reason)
 
     def test_refresh_local_slskd_config_credentials_rewrites_generated_config(self):
         with TemporaryDirectory() as tmpdir:

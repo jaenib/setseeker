@@ -8,9 +8,15 @@ import os
 def main():
     if len(sys.argv) < 4:
         print("Usage: python encrypt_credentials.py <username> <password> <outdir>")
-        return
+        return 1
 
     username, password, outdir = sys.argv[1], sys.argv[2], sys.argv[3]
+    if not username.strip():
+        print("Refusing to store credentials: username is empty.", file=sys.stderr)
+        return 1
+    if not password:
+        print("Refusing to store credentials: password is empty.", file=sys.stderr)
+        return 1
     out_path = Path(outdir)
     out_path.mkdir(parents=True, exist_ok=True)
     cr_file_path = Path(out_path / "slsk_cred.json")
@@ -35,6 +41,7 @@ def main():
 
     print(f"Encrypted credentials saved to {cr_file_path}")
     print(f"Key saved to {out_path}/slsk.key — don't share this!")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

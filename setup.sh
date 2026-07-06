@@ -75,6 +75,18 @@ stored_or_env_credentials_available() {
     [[ -f "$CRED_FILE" && -f "$KEY_FILE" ]]
 }
 
+prompt_soulseek_credentials() {
+    username=""
+    while [ -z "$username" ]; do
+        read -p "Enter your Soulseek username: " username
+    done
+    password=""
+    while [ -z "$password" ]; do
+        read -s -p "Enter your Soulseek password (cannot be empty): " password
+        echo ""
+    done
+}
+
 # Offer to import credentials from legacy sibling folders to avoid duplicate stores.
 if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] && [ -f "$LEGACY_KEY_FILE" ]; then
     echo "Found encrypted Soulseek credentials in ../user (legacy location)."
@@ -87,6 +99,15 @@ if [ ! -f "$CRED_FILE" ] && [ ! -f "$KEY_FILE" ] && [ -f "$LEGACY_CRED_FILE" ] &
     fi
 fi
 
+# Discard stored credentials that are unreadable or contain an empty username/password;
+# they would otherwise flow into slskd.yml and leave slskd unable to log in.
+if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
+    if ! python slskd_manager.py check-stored-credentials > /dev/null; then
+        echo "Stored Soulseek credentials are unusable and will be recreated."
+        rm -f "$CRED_FILE" "$KEY_FILE"
+    fi
+fi
+
 # 4. Prompt to create Soulseek credentials file
 if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
     echo "Encrypted Soulseek credentials already exist at $CRED_FILE"
@@ -94,9 +115,7 @@ if [ -f "$CRED_FILE" ] && [ -f "$KEY_FILE" ]; then
     change_answer=${change_answer:-N}
 
     if [[ "$change_answer" =~ ^[Yy]$ ]]; then
-        read -p "Enter your Soulseek username: " username
-        read -s -p "Enter your Soulseek password: " password
-        echo ""
+        prompt_soulseek_credentials
         source .venv/bin/activate
         python3 crencrypt.py "$username" "$password" "$CRED_DIR"
         CREDENTIALS_CHANGED=1
@@ -121,9 +140,7 @@ else
         answer=${answer:-Y}  # default to 'Y' if empty
 
         if [[ "$answer" =~ ^[Yy]$ ]]; then
-            read -p "Enter your Soulseek username: " username
-            read -s -p "Enter your Soulseek password: " password
-            echo ""
+            prompt_soulseek_credentials
             python3 crencrypt.py "$username" "$password" "$CRED_DIR"
             CREDENTIALS_CHANGED=1
         else
@@ -157,9 +174,11 @@ import time
 
 from reciprocity import format_reciprocity_doctor
 from seekspawner import get_expected_username_for_reciprocity, load_reciprocity_status
+from slskd_manager import local_slskd_login_failure_reason
 
 expected_username = get_expected_username_for_reciprocity()
 status = None
+login_failure = None
 deadline = time.time() + 90
 printed_wait = False
 while True:
@@ -167,7 +186,8 @@ while True:
     if status.overall_ok:
         break
 
-    if time.time() >= deadline:
+    login_failure = local_slskd_login_failure_reason()
+    if login_failure or time.time() >= deadline:
         break
 
     if not printed_wait:
@@ -176,6 +196,12 @@ while True:
     time.sleep(3)
 
 print(format_reciprocity_doctor(status))
+if login_failure:
+    print(f"\nLocal slskd cannot log in to Soulseek: {login_failure}", file=sys.stderr)
+    print(
+        "Rerun ./setup.sh and answer 'y' when asked to change credentials, then enter a valid Soulseek username and password.",
+        file=sys.stderr,
+    )
 if not status.overall_ok:
     print(
         "\nsetseek setup incomplete: local slskd is configured but not ready for reciprocity-backed downloads.",
