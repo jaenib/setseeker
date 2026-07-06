@@ -159,6 +159,73 @@ class DownloadBackendTests(unittest.TestCase):
         self.assertEqual(summary.missed_count, 1)
         self.assertEqual(summary.failed_count, 0)
 
+    def _backend_for_pick_tests(self, tmpdir):
+        fake_client = FakeSlskdApiClient(None)
+        fake_client.options = {"directories": {"downloads": str(tmpdir)}}
+        config = ReciprocityConfig(slskd=SlskdConfig(url="http://127.0.0.1:5030"))
+        with mock.patch.object(download_backends, "SlskdApiClient", return_value=fake_client):
+            return download_backends.SlskdDownloadBackend(
+                config=config,
+                output_dir=Path(tmpdir) / "spoils",
+                echo=lambda message: None,
+                sleep=lambda seconds: None,
+            )
+
+    def test_best_format_prefers_flac_candidates(self):
+        responses = [
+            {
+                "username": "sharer",
+                "hasFreeUploadSlot": True,
+                "queueLength": 0,
+                "uploadSpeed": 1000000,
+                "files": [
+                    {"filename": r"A\B\Artist - Track.mp3", "extension": "mp3", "size": 10, "bitRate": 320},
+                    {"filename": r"A\B\Artist - Track.flac", "extension": "flac", "size": 50},
+                ],
+            }
+        ]
+        query = download_backends.TrackQuery(
+            artist="Artist", title="Track", format=download_backends.FORMAT_BEST, min_bitrate=320
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            backend = self._backend_for_pick_tests(tmpdir)
+            candidate = backend._pick_candidate(query, responses)
+
+        self.assertIsNotNone(candidate)
+        self.assertTrue(candidate["filename"].endswith(".flac"))
+
+    def test_best_format_falls_back_to_mp3_and_keeps_bitrate_floor(self):
+        low_bitrate_only = [
+            {
+                "username": "sharer",
+                "hasFreeUploadSlot": True,
+                "queueLength": 0,
+                "uploadSpeed": 1000000,
+                "files": [{"filename": r"A\B\Artist - Track.mp3", "extension": "mp3", "size": 10, "bitRate": 192}],
+            }
+        ]
+        good_mp3_only = [
+            {
+                "username": "sharer",
+                "hasFreeUploadSlot": True,
+                "queueLength": 0,
+                "uploadSpeed": 1000000,
+                "files": [{"filename": r"A\B\Artist - Track.mp3", "extension": "mp3", "size": 10, "bitRate": 320}],
+            }
+        ]
+        query = download_backends.TrackQuery(
+            artist="Artist", title="Track", format=download_backends.FORMAT_BEST, min_bitrate=320
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            backend = self._backend_for_pick_tests(tmpdir)
+            self.assertIsNone(backend._pick_candidate(query, low_bitrate_only))
+            candidate = backend._pick_candidate(query, good_mp3_only)
+
+        self.assertIsNotNone(candidate)
+        self.assertTrue(candidate["filename"].endswith(".mp3"))
+
     def test_slskd_backend_retries_when_backend_is_logging_in(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)

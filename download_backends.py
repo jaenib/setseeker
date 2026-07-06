@@ -85,6 +85,10 @@ def _replace_invalid_filename_chars(value: str) -> str:
     return "".join("_" if char in invalid else char for char in value)
 
 
+# Queries with this format try FLAC first and fall back to mp3 in one search.
+FORMAT_BEST = "best"
+
+
 @dataclass(frozen=True)
 class TrackQuery:
     artist: str
@@ -97,7 +101,8 @@ class TrackQuery:
 
     @property
     def display_name(self) -> str:
-        return f"{self.artist} - {self.title} [{self.format}]"
+        label = "flac>mp3" if self.format == FORMAT_BEST else self.format
+        return f"{self.artist} - {self.title} [{label}]"
 
     @property
     def search_text(self) -> str:
@@ -282,7 +287,30 @@ class SlskdDownloadBackend:
             self.sleep(self.config.slskd.poll_interval_seconds)
         raise ReciprocityAuditError(f"slskd transfer for {candidate['filename']} did not complete in time")
 
+    def _format_tiers(self, query: TrackQuery) -> tuple[tuple[str, int], ...]:
+        if query.format == FORMAT_BEST:
+            return (("flac", 0), ("mp3", query.min_bitrate))
+        return ((query.format, query.min_bitrate),)
+
     def _pick_candidate(self, query: TrackQuery, responses: Sequence[dict]) -> Optional[dict]:
+        for fmt, min_bitrate in self._format_tiers(query):
+            scored = self._scored_candidates(query, responses, fmt, min_bitrate)
+            if not scored:
+                continue
+            scored.sort(
+                key=lambda item: (
+                    item["score"],
+                    item["has_free_slot"],
+                    -item["queue_length"],
+                    item["upload_speed"],
+                    -item["size"],
+                ),
+                reverse=True,
+            )
+            return scored[0]
+        return None
+
+    def _scored_candidates(self, query: TrackQuery, responses: Sequence[dict], fmt: str, min_bitrate: int) -> list[dict]:
         scored = []
         for response in responses or []:
             username = str(_dict_get_ci(response, "username") or "").strip()
@@ -291,7 +319,7 @@ class SlskdDownloadBackend:
             has_free_slot = bool(_dict_get_ci(response, "hasFreeUploadSlot"))
             files = list(_dict_get_ci(response, "files") or [])
             for file_info in files:
-                score = self._score_file(query, response, file_info)
+                score = self._score_file(query, response, file_info, fmt, min_bitrate)
                 if score is None:
                     continue
                 scored.append(
@@ -305,30 +333,16 @@ class SlskdDownloadBackend:
                         "has_free_slot": has_free_slot,
                     }
                 )
+        return scored
 
-        if not scored:
-            return None
-
-        scored.sort(
-            key=lambda item: (
-                item["score"],
-                item["has_free_slot"],
-                -item["queue_length"],
-                item["upload_speed"],
-                -item["size"],
-            ),
-            reverse=True,
-        )
-        return scored[0]
-
-    def _score_file(self, query: TrackQuery, response: dict, file_info: dict) -> Optional[float]:
+    def _score_file(self, query: TrackQuery, response: dict, file_info: dict, fmt: str, min_bitrate: int) -> Optional[float]:
         filename = str(_dict_get_ci(file_info, "filename") or "")
         extension = str(_dict_get_ci(file_info, "extension") or Path(filename).suffix.lstrip(".")).lower()
-        if extension != query.format:
+        if extension != fmt:
             return None
 
         bit_rate = _safe_int(_dict_get_ci(file_info, "bitRate"), 0)
-        if query.format == "mp3" and bit_rate < query.min_bitrate:
+        if fmt == "mp3" and bit_rate < min_bitrate:
             return None
 
         normalized_filename = _normalize_text(filename)
@@ -350,10 +364,10 @@ class SlskdDownloadBackend:
         if exact_phrase and exact_phrase in normalized_filename:
             score += 40
 
-        if query.format == "flac":
+        if fmt == "flac":
             score += 25
         else:
-            score += min(max(bit_rate - query.min_bitrate, 0), 64) / 4
+            score += min(max(bit_rate - min_bitrate, 0), 64) / 4
             if _dict_get_ci(file_info, "isVariableBitRate") is False:
                 score += 3
 

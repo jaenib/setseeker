@@ -8,7 +8,7 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-from download_backends import SlskdDownloadBackend, TrackQuery
+from download_backends import FORMAT_BEST, SlskdDownloadBackend, TrackQuery
 from reciprocity import ReciprocityAuditError, ReciprocityConfig, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
 
 try:
@@ -262,21 +262,22 @@ def build_track_queries(tracklist_dir, use_last_run_only=True):
                     skipped.append(f"[{file_path}:{lineno}] BAD FORMAT -> {cleaned}")
                     continue
 
-                for format_type in ["mp3", "flac"]:
-                    key = (artist.lower(), title.lower(), format_type)
-                    if key not in seen:
-                        seen.add(key)
-                        track_queries.append(
-                            TrackQuery(
-                                artist=artist,
-                                title=title,
-                                format=format_type,
-                                min_bitrate=320 if format_type == "mp3" else 0,
-                                source_file=file_path,
-                                source_line=lineno,
-                                raw_line=original,
-                            )
+                key = (artist.lower(), title.lower())
+                if key not in seen:
+                    seen.add(key)
+                    # One search per track; the backend prefers FLAC candidates
+                    # and falls back to mp3 (>= min_bitrate) from the same results.
+                    track_queries.append(
+                        TrackQuery(
+                            artist=artist,
+                            title=title,
+                            format=FORMAT_BEST,
+                            min_bitrate=320,
+                            source_file=file_path,
+                            source_line=lineno,
+                            raw_line=original,
                         )
+                    )
 
             else:
                 skipped.append(f"[{file_path}:{lineno}] NO HYPHEN or EMPTY -> {cleaned}")

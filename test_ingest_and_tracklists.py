@@ -134,10 +134,11 @@ class TracklistParsingTests(unittest.TestCase):
                     use_last_run_only=False,
                 )
 
-        self.assertEqual(len(queries), 2)
+        self.assertEqual(len(queries), 1)
         self.assertEqual(queries[0].artist, "Moby")
         self.assertEqual(queries[0].title, "Porcelain")
-        self.assertEqual(queries[0].format, "mp3")
+        self.assertEqual(queries[0].format, "best")
+        self.assertEqual(queries[0].min_bitrate, 320)
 
 
 if __name__ == "__main__":
