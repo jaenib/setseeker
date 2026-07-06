@@ -1,4 +1,5 @@
 import io
+import subprocess
 import tempfile
 import sys
 import types
@@ -13,6 +14,7 @@ fake_sclib.SoundcloudAPI = type("SoundcloudAPI", (), {})
 fake_sclib.Track = type("Track", (), {})
 sys.modules.setdefault("sclib", fake_sclib)
 
+import fileshazzer
 import ingest
 import scdl
 import seekspawner
@@ -68,6 +70,52 @@ class SoundCloudIngestTests(unittest.TestCase):
 
             self.assertTrue(existing.exists())
             self.assertFalse((sets_dir / "partial.mp3").exists())
+
+
+class SegmentSplitTests(unittest.TestCase):
+    def test_copy_command_streams_without_reencoding(self):
+        command = fileshazzer.build_split_command("in.mp3", "out_%03d.mp3", 60, reencode=False)
+        self.assertIn("copy", command)
+        self.assertNotIn("192k", command)
+        self.assertEqual(command[-1], "out_%03d.mp3")
+
+    def test_reencode_command_normalizes_audio(self):
+        command = fileshazzer.build_split_command("in.mp3", "out_%03d.mp3", 60, reencode=True)
+        self.assertIn("192k", command)
+        self.assertNotIn("copy", command)
+
+    def test_split_audio_falls_back_to_reencode_when_copy_fails(self):
+        calls = []
+
+        def fake_run(command, check=False):
+            calls.append(command)
+            if "copy" in command:
+                raise subprocess.CalledProcessError(1, command)
+
+        with mock.patch.object(fileshazzer.subprocess, "run", side_effect=fake_run), mock.patch.object(
+            fileshazzer, "remove_segments_for"
+        ) as cleanup, mock.patch.dict("os.environ", {"SETSEEK_SEGMENT_REENCODE": ""}), redirect_stdout(io.StringIO()):
+            fileshazzer.split_audio("sets/x.mp3", 60)
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn("copy", calls[0])
+        self.assertIn("192k", calls[1])
+        cleanup.assert_called_once_with("x")
+
+    def test_split_audio_honors_forced_reencode_env(self):
+        calls = []
+
+        def fake_run(command, check=False):
+            calls.append(command)
+
+        with mock.patch.object(fileshazzer.subprocess, "run", side_effect=fake_run), mock.patch.dict(
+            "os.environ", {"SETSEEK_SEGMENT_REENCODE": "1"}
+        ), redirect_stdout(io.StringIO()):
+            fileshazzer.split_audio("sets/x.mp3", 60)
+
+        self.assertEqual(len(calls), 1)
+        self.assertIn("192k", calls[0])
+        self.assertNotIn("copy", calls[0])
 
 
 class TracklistParsingTests(unittest.TestCase):

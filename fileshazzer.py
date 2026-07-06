@@ -115,12 +115,7 @@ def format_track_entry(entry):
         timestamp = start
     return f"[{timestamp}] {entry['artist']} - {entry['title']}"
 
-# Split set audio into segments
-def split_audio(input_file, segment_length):
-    print(f"Splitting {input_file} into {segment_length}-second chunks...")
-    base_name = os.path.splitext(os.path.basename(input_file))[0]
-    segment_pattern = os.path.join(SEGMENTS_DIR, f"{base_name}_%03d.mp3")
-
+def build_split_command(input_file, segment_pattern, segment_length, reencode):
     # Keep ffmpeg output clean and exclude attached picture streams from source MP3s.
     command = [
         "ffmpeg",
@@ -144,16 +139,44 @@ def split_audio(input_file, segment_length):
         str(segment_length),
         "-segment_format",
         "mp3",
-        "-ar",
-        "44100",
-        "-ac",
-        "2",
-        "-b:a",
-        "192k",
-        segment_pattern,
     ]
+    if reencode:
+        command += ["-ar", "44100", "-ac", "2", "-b:a", "192k"]
+    else:
+        # Stream copy splits in seconds instead of re-encoding the whole set.
+        # Worst case is a <100ms bit-reservoir glitch at each segment start,
+        # which Shazam recognition tolerates.
+        command += ["-c:a", "copy"]
+    command.append(segment_pattern)
+    return command
 
-    subprocess.run(command, check=True)
+
+def remove_segments_for(base_name):
+    for file in os.listdir(SEGMENTS_DIR):
+        if file.startswith(f"{base_name}_") and file.endswith(".mp3"):
+            os.remove(os.path.join(SEGMENTS_DIR, file))
+
+
+def reencode_forced():
+    return os.environ.get("SETSEEK_SEGMENT_REENCODE", "").strip().lower() in {"1", "true", "yes"}
+
+
+# Split set audio into segments
+def split_audio(input_file, segment_length):
+    print(f"Splitting {input_file} into {segment_length}-second chunks...")
+    base_name = os.path.splitext(os.path.basename(input_file))[0]
+    segment_pattern = os.path.join(SEGMENTS_DIR, f"{base_name}_%03d.mp3")
+
+    if reencode_forced():
+        subprocess.run(build_split_command(input_file, segment_pattern, segment_length, reencode=True), check=True)
+        return
+
+    try:
+        subprocess.run(build_split_command(input_file, segment_pattern, segment_length, reencode=False), check=True)
+    except subprocess.CalledProcessError:
+        print("Stream-copy split failed; retrying with re-encoding...")
+        remove_segments_for(base_name)
+        subprocess.run(build_split_command(input_file, segment_pattern, segment_length, reencode=True), check=True)
 
 # Recognize tracks with ShazamIO
 async def recognize_tracks(segment_length):
