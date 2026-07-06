@@ -52,7 +52,7 @@ class ReciprocityTests(unittest.TestCase):
             },
             options={
                 "soulseek": {"listenPort": 50300, "listenIpAddress": "0.0.0.0"},
-                "global": {"upload": {"slots": 20}},
+                "transfers": {"upload": {"slots": 20}},
             },
             shares={"local": [{"id": "share-1"}, {"id": "share-2"}]},
             uploads=[{"bytesTransferred": 2048}],
@@ -66,9 +66,36 @@ class ReciprocityTests(unittest.TestCase):
         )
 
         self.assertTrue(status.overall_ok)
+        self.assertTrue(status.upload_capable)
         self.assertIsNone(status.listening_port_ok)
         self.assertEqual(status.bytes_uploaded, 2048)
         self.assertEqual(status.bytes_downloaded, 4096)
+
+    def test_upload_slots_read_from_legacy_global_options(self):
+        snapshot = reciprocity.SlskdSnapshot(
+            base_url="http://slskd.example:5030",
+            state={
+                "server": {"isLoggedIn": True},
+                "shares": {"ready": True, "scanning": False, "faulted": False, "cancelled": False, "directories": 42, "files": 9000},
+                "user": {"username": "alice"},
+            },
+            options={
+                "soulseek": {"listenPort": 50300, "listenIpAddress": "0.0.0.0"},
+                "global": {"upload": {"slots": 20}},
+            },
+            shares={"local": [{"id": "share-1"}]},
+            uploads=[],
+            downloads=[],
+        )
+
+        status = reciprocity.evaluate_slskd_snapshot(
+            snapshot,
+            reciprocity.ReciprocityConfig(slskd=reciprocity.SlskdConfig(url="http://slskd.example:5030")),
+            expected_username="alice",
+        )
+
+        self.assertTrue(status.overall_ok)
+        self.assertTrue(status.upload_capable)
 
     def test_empty_download_subdir_of_shared_root_warns_but_allows_first_session(self):
         snapshot = reciprocity.SlskdSnapshot(

@@ -529,7 +529,10 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
             f"slskd is configured at remote host {parsed_base.hostname}; local port-bind verification is not possible from setseeker."
         )
 
-    upload_slots = _safe_int(_deep_get(snapshot.options, ["global", "upload", "slots"], 0), 0)
+    upload_slots = _safe_int(_deep_get(snapshot.options, ["transfers", "upload", "slots"], 0), 0)
+    if upload_slots <= 0:
+        # Older slskd releases exposed upload limits under "global" instead of "transfers".
+        upload_slots = _safe_int(_deep_get(snapshot.options, ["global", "upload", "slots"], 0), 0)
     status.upload_capable = state_server_logged_in and upload_slots > 0 and status.shares_configured
     status.background_share_mode = state_server_logged_in
 
