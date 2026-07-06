@@ -175,7 +175,9 @@ def download_track(track):
 
     try:
         with download_spinner(f"Downloading {destination.name}"):
-            with open(partial, "wb") as file:
+            # sclib re-reads the written stream to embed ID3 metadata, so the
+            # handle must be readable as well ("wb+"), not write-only.
+            with open(partial, "wb+") as file:
                 track.write_mp3_to(file)
             partial.replace(destination)
     except Exception:

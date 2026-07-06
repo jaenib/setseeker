@@ -25,6 +25,29 @@ class SoundCloudIngestTests(unittest.TestCase):
                 "https://soundcloud.com/discover/sets/track-stations:2350338077"
             )
 
+    def test_download_track_gives_sclib_a_readable_file_handle(self):
+        # sclib's write_mp3_to seeks back and re-reads the stream to embed
+        # ID3 metadata, so download_track must not open the file write-only.
+        class FakeTrack:
+            artist = "Mementomor"
+            title = "Radio Ozora"
+
+            def write_mp3_to(self, file):
+                file.write(b"mp3-bytes")
+                file.seek(0)
+                assert file.read() == b"mp3-bytes"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sets_dir = Path(tmpdir) / "sets"
+            sets_dir.mkdir()
+            with mock.patch.object(scdl, "SETS_DIR", sets_dir):
+                with redirect_stdout(io.StringIO()):
+                    scdl.download_track(FakeTrack())
+
+            destination = sets_dir / "Mementomor - Radio Ozora.mp3"
+            self.assertEqual(destination.read_bytes(), b"mp3-bytes")
+            self.assertEqual(list(sets_dir.iterdir()), [destination])
+
     def test_failed_soundcloud_ingest_cleans_created_mp3s(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sets_dir = Path(tmpdir) / "sets"
