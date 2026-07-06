@@ -7,6 +7,16 @@ import download_backends
 from reciprocity import ReciprocityConfig, SlskdConfig
 
 
+class TrackQuerySearchTextTests(unittest.TestCase):
+    def test_search_text_drops_punctuation_terms(self):
+        query = download_backends.TrackQuery(artist="Sinegoma & Mementomor", title="Present Experience", format="mp3")
+        self.assertEqual(query.search_text, "Sinegoma Mementomor Present Experience")
+
+    def test_search_text_keeps_unicode_letters(self):
+        query = download_backends.TrackQuery(artist="Ggoldie, Chlè", title="Asambe (feat. RIVALZ)", format="mp3")
+        self.assertEqual(query.search_text, "Ggoldie Chlè Asambe feat RIVALZ")
+
+
 class FakeSlskdApiClient:
     def __init__(self, config):
         self.config = config

@@ -71,6 +71,15 @@ class ReciprocityTests(unittest.TestCase):
         self.assertEqual(status.bytes_uploaded, 2048)
         self.assertEqual(status.bytes_downloaded, 4096)
 
+    def test_create_search_sends_timeout_in_milliseconds(self):
+        client = reciprocity.SlskdApiClient(reciprocity.SlskdConfig(url="http://slskd.example:5030"))
+        with mock.patch.object(client, "_post_json", return_value={"id": "x"}) as post:
+            client.create_search("abc", "some track", search_timeout=15, response_limit=100, file_limit=10000)
+
+        payload = post.call_args.args[1]
+        self.assertEqual(payload["searchTimeout"], 15000)
+        self.assertEqual(payload["searchText"], "some track")
+
     def test_upload_slots_read_from_legacy_global_options(self):
         snapshot = reciprocity.SlskdSnapshot(
             base_url="http://slskd.example:5030",

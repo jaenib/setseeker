@@ -428,7 +428,9 @@ class SlskdApiClient:
         payload = {
             "id": str(search_id),
             "searchText": search_text,
-            "searchTimeout": search_timeout,
+            # slskd expects searchTimeout in milliseconds; sending seconds makes
+            # every search end after ~15ms, before any peer can respond.
+            "searchTimeout": max(_safe_int(search_timeout, 15), 1) * 1000,
             "responseLimit": response_limit,
             "fileLimit": file_limit,
         }

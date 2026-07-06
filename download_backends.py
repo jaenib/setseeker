@@ -101,7 +101,13 @@ class TrackQuery:
 
     @property
     def search_text(self) -> str:
-        return f"{self.artist} {self.title}".strip()
+        # Soulseek treats every whitespace-separated term as a required
+        # substring, so punctuation like "&" or "," excludes peers whose
+        # filenames spell the collaboration differently. Search with bare
+        # words only and let candidate scoring judge the results.
+        raw = f"{self.artist} {self.title}"
+        cleaned = "".join(char if (char.isalnum() or char.isspace()) else " " for char in raw)
+        return " ".join(cleaned.split())
 
 
 @dataclass
