@@ -36,7 +36,7 @@ LOCAL_SLSKD_PID_PATH = LOCAL_SLSKD_ROOT / "slskd.pid"
 LOCAL_SLSKD_LOG_PATH = LOCAL_SLSKD_ROOT / "slskd.log"
 
 CREDENTIAL_DIR = USER_DIR
-DOWNLOAD_DIR = REPO_ROOT / "spoils"
+DOWNLOAD_DIR = Path("/Users/damianwoloszka/Desktop/Muza Nowa Pobierana")
 INCOMPLETE_DIR = REPO_ROOT / "tmp" / "slskd-incomplete"
 DEFAULT_SHARE_DIR = DOWNLOAD_DIR
 DEFAULT_WEB_HOST = "127.0.0.1"
