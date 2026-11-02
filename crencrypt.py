@@ -1,9 +1,11 @@
 # encrypt_credentials.py
-import sys
 import json
-from cryptography.fernet import Fernet
-from pathlib import Path
 import os
+import sys
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+
 
 def main():
     if len(sys.argv) < 4:

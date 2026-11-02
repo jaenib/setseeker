@@ -9,7 +9,14 @@ from getpass import getpass
 from pathlib import Path
 
 from download_backends import FORMAT_BEST, SlskdDownloadBackend, TrackQuery
-from reciprocity import ReciprocityAuditError, ReciprocityConfig, config_error_status, evaluate_reciprocity_status, format_reciprocity_doctor, load_reciprocity_config
+from reciprocity import (
+    ReciprocityAuditError,
+    ReciprocityConfig,
+    config_error_status,
+    evaluate_reciprocity_status,
+    format_reciprocity_doctor,
+    load_reciprocity_config,
+)
 
 try:
     from cryptography.fernet import Fernet
@@ -46,7 +53,7 @@ def cred_pair_exists(cred_dir):
 
 def load_cred(cred_dir):
     cred_path, key_path = cred_paths(cred_dir)
-    with open(cred_path, "r", encoding="utf-8") as f:
+    with open(cred_path, encoding="utf-8") as f:
         data = json.load(f)
     with open(key_path, "rb") as f:
         key = f.read()
@@ -204,7 +211,7 @@ def is_queryfied(artist, title):
 def list_tracklist_files(tracklist_dir, use_last_run_only=True):
     if use_last_run_only and TRACKLIST_MANIFEST_PATH.is_file():
         manifest_paths = []
-        with open(TRACKLIST_MANIFEST_PATH, "r", encoding="utf-8") as f:
+        with open(TRACKLIST_MANIFEST_PATH, encoding="utf-8") as f:
             for line in f:
                 candidate = line.strip()
                 if not candidate:
@@ -232,7 +239,7 @@ def build_track_queries(tracklist_dir, use_last_run_only=True):
     txt_files = list_tracklist_files(tracklist_dir, use_last_run_only=use_last_run_only)
 
     for file_path in txt_files:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             lines = f.readlines()
 
         for lineno, line in enumerate(lines, 1):

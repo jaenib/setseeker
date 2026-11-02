@@ -47,7 +47,6 @@ class FakeSlskdApiClient:
 
     def delete_search(self, search_id):
         del search_id
-        return None
 
     def enqueue_download(self, username, files):
         del username, files
@@ -144,17 +143,19 @@ class DownloadBackendTests(unittest.TestCase):
             slskd=SlskdConfig(url="http://127.0.0.1:5030"),
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.object(download_backends, "SlskdApiClient", return_value=fake_client):
-                backend = download_backends.SlskdDownloadBackend(
-                    config=config,
-                    output_dir=Path(tmpdir) / "spoils",
-                    echo=lambda message: None,
-                    sleep=lambda seconds: None,
-                )
-                summary = backend.download_queries(
-                    [download_backends.TrackQuery(artist="Artist", title="Track", format="mp3", min_bitrate=320)]
-                )
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            mock.patch.object(download_backends, "SlskdApiClient", return_value=fake_client),
+        ):
+            backend = download_backends.SlskdDownloadBackend(
+                config=config,
+                output_dir=Path(tmpdir) / "spoils",
+                echo=lambda message: None,
+                sleep=lambda seconds: None,
+            )
+            summary = backend.download_queries(
+                [download_backends.TrackQuery(artist="Artist", title="Track", format="mp3", min_bitrate=320)]
+            )
 
         self.assertEqual(summary.missed_count, 1)
         self.assertEqual(summary.failed_count, 0)

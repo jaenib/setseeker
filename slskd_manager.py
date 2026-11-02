@@ -18,12 +18,9 @@ import zipfile
 from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
-from typing import Optional
 
 from cryptography.fernet import Fernet
-
 from reciprocity import RECIPROCITY_CONFIG_PATH, SlskdApiClient, load_reciprocity_config
-
 
 REPO_ROOT = Path(__file__).resolve().parent
 USER_DIR = REPO_ROOT / "user"
@@ -138,7 +135,7 @@ def ensure_directories():
         path.mkdir(parents=True, exist_ok=True)
 
 
-def choose_share_dir(non_interactive: bool, explicit_share_dir: Optional[str]) -> Path:
+def choose_share_dir(non_interactive: bool, explicit_share_dir: str | None) -> Path:
     if explicit_share_dir:
         return Path(explicit_share_dir).expanduser().resolve()
 
@@ -353,7 +350,7 @@ def get_latest_release_info() -> tuple[str, str]:
     raise SlskdBootstrapError(f"Could not find release asset {asset_name} in the latest slskd release")
 
 
-def find_installed_local_executable() -> Optional[Path]:
+def find_installed_local_executable() -> Path | None:
     if not LOCAL_SLSKD_INSTALL_ROOT.exists():
         return None
     candidates = sorted(LOCAL_SLSKD_INSTALL_ROOT.rglob("slskd"), reverse=True)
@@ -363,7 +360,7 @@ def find_installed_local_executable() -> Optional[Path]:
     return None
 
 
-def find_available_executable() -> Optional[Path]:
+def find_available_executable() -> Path | None:
     local = find_installed_local_executable()
     if local:
         return local
@@ -398,7 +395,7 @@ def install_local_slskd() -> tuple[Path, str]:
     return executable, version
 
 
-def bootstrap_config(non_interactive: bool, explicit_share_dir: Optional[str]) -> dict:
+def bootstrap_config(non_interactive: bool, explicit_share_dir: str | None) -> dict:
     ensure_directories()
     metadata = load_bootstrap_metadata()
     if LOCAL_SLSKD_CONFIG_PATH.is_file():
@@ -626,7 +623,7 @@ LOGIN_FAILURE_LOG_MARKERS = (
 )
 
 
-def local_slskd_login_failure_reason() -> Optional[str]:
+def local_slskd_login_failure_reason() -> str | None:
     """Return a human-readable login failure from the most recent run in the local slskd log, if any."""
     try:
         with open(LOCAL_SLSKD_LOG_PATH, "rb") as log_file:
@@ -647,7 +644,7 @@ def local_slskd_login_failure_reason() -> Optional[str]:
     return None
 
 
-def read_pid() -> Optional[int]:
+def read_pid() -> int | None:
     if not LOCAL_SLSKD_PID_PATH.is_file():
         return None
     try:
@@ -687,7 +684,7 @@ def stop_local_slskd(timeout_seconds: float = 10.0) -> bool:
     return not process_is_running(pid)
 
 
-def start_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) -> dict:
+def start_local_slskd(non_interactive: bool, explicit_share_dir: str | None) -> dict:
     metadata = bootstrap_config(non_interactive=non_interactive, explicit_share_dir=explicit_share_dir)
     write_reciprocity_config(metadata)
 
@@ -742,7 +739,7 @@ def start_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) 
     raise SlskdBootstrapError(_bootstrap_failure_message(configured_api_health()))
 
 
-def ensure_local_slskd(non_interactive: bool, explicit_share_dir: Optional[str]) -> dict:
+def ensure_local_slskd(non_interactive: bool, explicit_share_dir: str | None) -> dict:
     ensure_directories()
     if configured_api_reachable():
         metadata = load_bootstrap_metadata()

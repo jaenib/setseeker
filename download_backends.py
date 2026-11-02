@@ -6,9 +6,9 @@ import time
 import unicodedata
 import urllib.parse
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional, Sequence
 
 from reciprocity import ReciprocityAuditError, ReciprocityConfig, SlskdApiClient
 
@@ -120,9 +120,9 @@ class TrackDownloadResult:
     query: TrackQuery
     status: str
     detail: str
-    remote_username: Optional[str] = None
-    remote_filename: Optional[str] = None
-    local_path: Optional[Path] = None
+    remote_username: str | None = None
+    remote_filename: str | None = None
+    local_path: Path | None = None
     size_bytes: int = 0
 
 
@@ -199,7 +199,7 @@ class SlskdDownloadBackend:
         self._create_search_with_retry(search_id, query)
 
         try:
-            search = self._wait_for_search(search_id)
+            self._wait_for_search(search_id)
             responses = self.client.get_search_responses(search_id)
         finally:
             self.client.delete_search(search_id)
@@ -276,7 +276,7 @@ class SlskdDownloadBackend:
             self.sleep(self.config.slskd.poll_interval_seconds)
         raise ReciprocityAuditError(f"slskd search {search_id} did not complete in time")
 
-    def _wait_for_transfer(self, candidate: dict, enqueued_transfer: Optional[dict]):
+    def _wait_for_transfer(self, candidate: dict, enqueued_transfer: dict | None):
         deadline = time.monotonic() + max(self.config.slskd.transfer_timeout_seconds, 30)
         transfer_id = str(_dict_get_ci(enqueued_transfer or {}, "id") or "")
         while time.monotonic() < deadline:
@@ -292,7 +292,7 @@ class SlskdDownloadBackend:
             return (("flac", 0), ("mp3", query.min_bitrate))
         return ((query.format, query.min_bitrate),)
 
-    def _pick_candidate(self, query: TrackQuery, responses: Sequence[dict]) -> Optional[dict]:
+    def _pick_candidate(self, query: TrackQuery, responses: Sequence[dict]) -> dict | None:
         for fmt, min_bitrate in self._format_tiers(query):
             scored = self._scored_candidates(query, responses, fmt, min_bitrate)
             if not scored:
@@ -335,7 +335,7 @@ class SlskdDownloadBackend:
                 )
         return scored
 
-    def _score_file(self, query: TrackQuery, response: dict, file_info: dict, fmt: str, min_bitrate: int) -> Optional[float]:
+    def _score_file(self, query: TrackQuery, response: dict, file_info: dict, fmt: str, min_bitrate: int) -> float | None:
         filename = str(_dict_get_ci(file_info, "filename") or "")
         extension = str(_dict_get_ci(file_info, "extension") or Path(filename).suffix.lstrip(".")).lower()
         if extension != fmt:
@@ -421,7 +421,7 @@ class SlskdDownloadBackend:
             self.sleep(1.0)
         return False
 
-    def _match_transfer(self, transfers: Sequence[dict], transfer_id: str, remote_filename: str) -> Optional[dict]:
+    def _match_transfer(self, transfers: Sequence[dict], transfer_id: str, remote_filename: str) -> dict | None:
         if transfer_id:
             for transfer in transfers:
                 if str(_dict_get_ci(transfer, "id") or "") == transfer_id:
@@ -431,7 +431,7 @@ class SlskdDownloadBackend:
                 return transfer
         return None
 
-    def _resolve_local_download_root(self) -> Optional[Path]:
+    def _resolve_local_download_root(self) -> Path | None:
         downloads_dir = _dict_get_ci(self.options, "directories")
         if not isinstance(downloads_dir, dict):
             return None
@@ -443,7 +443,7 @@ class SlskdDownloadBackend:
         path = Path(base).expanduser()
         return path if path.exists() else None
 
-    def _mirror_to_spoils(self, remote_filename: str) -> Optional[Path]:
+    def _mirror_to_spoils(self, remote_filename: str) -> Path | None:
         if not self.config.slskd.mirror_downloads_to_spoils:
             return None
         if self.local_download_root is None:

@@ -1,7 +1,7 @@
-import sys
+import asyncio
 import os
 import subprocess
-import asyncio
+import sys
 from pathlib import Path
 
 try:

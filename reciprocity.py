@@ -93,7 +93,7 @@ def _env(name: str) -> str:
 
 def _load_json_file(path: Path) -> dict[str, Any]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as exc:
         raise ReciprocityAuditError(f"{path} contains invalid JSON") from exc

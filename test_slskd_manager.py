@@ -125,9 +125,8 @@ class SlskdManagerTests(unittest.TestCase):
 
             with mock.patch.object(slskd_manager, "CREDENTIAL_DIR", cred_dir), mock.patch.dict(
                 os.environ, {"SLSK_USERNAME": "", "SLSK_PASSWORD": ""}
-            ):
-                with self.assertRaises(slskd_manager.SlskdBootstrapError) as ctx:
-                    slskd_manager.resolve_credentials(allow_prompt=False)
+            ), self.assertRaises(slskd_manager.SlskdBootstrapError) as ctx:
+                slskd_manager.resolve_credentials(allow_prompt=False)
 
         self.assertIn("password", str(ctx.exception))
 
