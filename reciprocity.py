@@ -2,24 +2,25 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import socket
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 try:
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet, InvalidToken
 except ImportError:
     Fernet = None
+    InvalidToken = ()
 
 
-RECIPROCITY_CONFIG_PATH = Path("user/reciprocity_config.json")
-RECIPROCITY_CONFIG_EXAMPLE_PATH = Path("reciprocity_config.example.json")
-BOOTSTRAP_ENCRYPTION_KEY_PATH = Path("user/slskd.key")
+_SETSEEKER_ROOT = Path(__file__).resolve().parent
+RECIPROCITY_CONFIG_PATH = _SETSEEKER_ROOT / "user" / "reciprocity_config.json"
+RECIPROCITY_CONFIG_EXAMPLE_PATH = _SETSEEKER_ROOT / "reciprocity_config.example.json"
+BOOTSTRAP_ENCRYPTION_KEY_PATH = _SETSEEKER_ROOT / "user" / "slskd.key"
 
 
 @dataclass
@@ -48,15 +49,15 @@ class ReciprocityStatus:
     backend: str
     backend_configured: bool
     backend_reachable: bool
-    expected_username: Optional[str]
-    backend_username: Optional[str]
+    expected_username: str | None
+    backend_username: str | None
     shares_configured: bool
     share_scan_ok: bool
     shared_directory_roots: int
     shared_folder_count: int
     shared_file_count: int
-    listening_port_ok: Optional[bool]
-    listening_port: Optional[int]
+    listening_port_ok: bool | None
+    listening_port: int | None
     upload_capable: bool
     background_share_mode: bool
     bytes_uploaded: int
@@ -92,7 +93,7 @@ def _env(name: str) -> str:
 
 def _load_json_file(path: Path) -> dict[str, Any]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as exc:
         raise ReciprocityAuditError(f"{path} contains invalid JSON") from exc
@@ -174,11 +175,11 @@ def _decrypt_api_key(api_key: str, is_encrypted: bool) -> str:
         fernet = Fernet(key)
         decrypted = fernet.decrypt(api_key.encode("utf-8")).decode("utf-8")
         return decrypted
-    except Exception:
+    except (ValueError, TypeError, OSError, InvalidToken):
         return api_key
 
 
-def _bool_label(value: Optional[bool]) -> str:
+def _bool_label(value: bool | None) -> str:
     if value is True:
         return "OK"
     if value is False:
@@ -227,7 +228,7 @@ def _is_local_host(hostname: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1"}
 
 
-def _probe_local_port(port: int, listen_ip: str) -> Optional[bool]:
+def _probe_local_port(port: int, listen_ip: str) -> bool | None:
     if port <= 0:
         return False
 
@@ -293,7 +294,7 @@ def _count_configured_share_roots(snapshot: SlskdSnapshot) -> int:
     return configured_shares
 
 
-def _extract_download_directory(snapshot: SlskdSnapshot) -> Optional[str]:
+def _extract_download_directory(snapshot: SlskdSnapshot) -> str | None:
     candidates = (
         _deep_get(snapshot.options, ["directories", "downloads"], ""),
         _deep_get(snapshot.options, ["directories", "downloadsDirectory"], ""),
@@ -336,7 +337,7 @@ class SlskdApiClient:
         if self.config.api_key:
             headers["X-API-Key"] = self.config.api_key
         elif self.config.username and self.config.password:
-            token = base64.b64encode(f"{self.config.username}:{self.config.password}".encode("utf-8")).decode("ascii")
+            token = base64.b64encode(f"{self.config.username}:{self.config.password}".encode()).decode("ascii")
             headers["Authorization"] = f"Basic {token}"
         return headers
 
@@ -359,7 +360,7 @@ class SlskdApiClient:
             error_payload = ""
             try:
                 error_payload = exc.read().decode("utf-8", errors="replace").strip()
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 error_payload = ""
             if exc.code in {401, 403}:
                 raise ReciprocityAuditError(
@@ -408,7 +409,7 @@ class SlskdApiClient:
             raise ReciprocityAuditError("slskd shares endpoint returned an unexpected response shape")
         return data
 
-    def list_downloads(self, include_removed: bool = False, username: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_downloads(self, include_removed: bool = False, username: str | None = None) -> list[dict[str, Any]]:
         if username:
             path = f"/api/v0/transfers/downloads/{urllib.parse.quote(username, safe='')}"
         else:
@@ -479,7 +480,7 @@ class SlskdApiClient:
         )
 
 
-def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, expected_username: Optional[str]) -> ReciprocityStatus:
+def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, expected_username: str | None) -> ReciprocityStatus:
     status = ReciprocityStatus(
         backend="slskd",
         backend_configured=True,
@@ -622,7 +623,7 @@ def evaluate_slskd_snapshot(snapshot: SlskdSnapshot, config: ReciprocityConfig, 
     return status
 
 
-def evaluate_reciprocity_status(config: ReciprocityConfig, expected_username: Optional[str]) -> ReciprocityStatus:
+def evaluate_reciprocity_status(config: ReciprocityConfig, expected_username: str | None) -> ReciprocityStatus:
     if not config.slskd.url:
         status = ReciprocityStatus(
             backend="slskd",
@@ -684,7 +685,7 @@ def evaluate_reciprocity_status(config: ReciprocityConfig, expected_username: Op
     return evaluate_slskd_snapshot(snapshot, config, expected_username)
 
 
-def config_error_status(message: str, expected_username: Optional[str]) -> ReciprocityStatus:
+def config_error_status(message: str, expected_username: str | None) -> ReciprocityStatus:
     status = ReciprocityStatus(
         backend="config-error",
         backend_configured=False,
@@ -718,8 +719,7 @@ def format_reciprocity_doctor(status: ReciprocityStatus) -> str:
     lines = [
         "Reciprocity doctor",
         f"- Backend: {status.backend}",
-        f"- Shares: {_share_status_label(status)}"
-        f" ({status.shared_directory_roots} configured roots, {status.shared_folder_count} folders, {status.shared_file_count} files)",
+        f"- Shares: {_share_status_label(status)} ({status.shared_directory_roots} configured roots, {status.shared_folder_count} folders, {status.shared_file_count} files)",
         f"- Scan: {'OK' if status.share_scan_ok else 'FAIL'}",
         f"- Reachability: {_bool_label(status.listening_port_ok)}"
         + (f" (listen port {status.listening_port})" if status.listening_port else ""),
@@ -727,8 +727,7 @@ def format_reciprocity_doctor(status: ReciprocityStatus) -> str:
         f"- Background share mode: {'OK' if status.background_share_mode else 'FAIL'}",
         f"- Account match: {'OK' if _account_match_ok(status) else 'UNKNOWN' if not status.backend_username else 'FAIL'}"
         + _account_match_suffix(status),
-        f"- Transfer totals: uploaded {format_bytes(status.bytes_uploaded)} in {status.upload_count} uploads; "
-        f"downloaded {format_bytes(status.bytes_downloaded)} in {status.download_count} downloads",
+        f"- Transfer totals: uploaded {format_bytes(status.bytes_uploaded)} in {status.upload_count} uploads; downloaded {format_bytes(status.bytes_downloaded)} in {status.download_count} downloads",
         f"- Overall download eligibility: {overall}",
     ]
 

@@ -1,7 +1,7 @@
 import io
 import subprocess
-import tempfile
 import sys
+import tempfile
 import types
 import unittest
 from contextlib import redirect_stdout
@@ -42,9 +42,8 @@ class SoundCloudIngestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             sets_dir = Path(tmpdir) / "sets"
             sets_dir.mkdir()
-            with mock.patch.object(scdl, "SETS_DIR", sets_dir):
-                with redirect_stdout(io.StringIO()):
-                    scdl.download_track(FakeTrack())
+            with mock.patch.object(scdl, "SETS_DIR", sets_dir), redirect_stdout(io.StringIO()):
+                scdl.download_track(FakeTrack())
 
             destination = sets_dir / "Mementomor - Radio Ozora.mp3"
             self.assertEqual(destination.read_bytes(), b"mp3-bytes")
@@ -62,11 +61,13 @@ class SoundCloudIngestTests(unittest.TestCase):
                 (sets_dir / "partial.mp3").write_bytes(b"delete")
                 raise RuntimeError("download failed")
 
-            with mock.patch.object(ingest, "SETS_DIR", sets_dir):
-                with mock.patch.object(ingest.scdl, "main", side_effect=fake_scdl_main):
-                    with self.assertRaisesRegex(RuntimeError, "download failed"):
-                        with redirect_stdout(io.StringIO()):
-                            ingest.ingest_soundcloud("https://soundcloud.com/example/set")
+            with (
+                mock.patch.object(ingest, "SETS_DIR", sets_dir),
+                mock.patch.object(ingest.scdl, "main", side_effect=fake_scdl_main),
+                self.assertRaisesRegex(RuntimeError, "download failed"),
+                redirect_stdout(io.StringIO()),
+            ):
+                ingest.ingest_soundcloud("https://soundcloud.com/example/set")
 
             self.assertTrue(existing.exists())
             self.assertFalse((sets_dir / "partial.mp3").exists())
